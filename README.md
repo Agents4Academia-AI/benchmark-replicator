@@ -1,7 +1,13 @@
 # Baseline Replicator
 
-Give it an arXiv paper, get back a **clean, minimal, single-purpose repo** that implements
-the paper's main method — simple enough to read and trust, and easy to drop in as a baseline.
+> Give it an arXiv paper, get back a **clean, minimal, single-purpose repo**
+> that implements the paper's main method -- simple enough to read and trust,
+> and easy to drop in as a baseline.
+
+**Team:** Arya · Olga · Sahel
+**Day-5 demo targets (Fri 19 Jun):**
+1. Eval dataset and pipeline
+2. Agent in action
 
 It's built for ML researchers (ICML/NeurIPS/ICLR) who need to compare against methods whose
 code is missing, sloppy, or unrunnable.
@@ -62,3 +68,10 @@ replicator/
 ├── pipeline.py   # orchestrator: runs phases, streams progress, planning checkpoint
 └── prompts/      # one system prompt per sub-agent
 ```
+
+
+---
+
+## Acknowledgements
+
+Built during [Agents4Academia](https://github.com/Agents4Academia-AI), 14–26 June 2026.
