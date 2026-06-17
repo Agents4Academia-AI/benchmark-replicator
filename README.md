@@ -1,4 +1,4 @@
-# Baseline Replicator
+# Benchmark Replicator
 
 > Give it an arXiv paper, get back a **clean, minimal, single-purpose repo**
 > that implements the paper's main method -- simple enough to read and trust,
