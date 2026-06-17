@@ -22,7 +22,8 @@ from claude_agent_sdk import (
     query,
 )
 
-from .phases import PHASES, Phase
+from .phases import BENCHMARKER, CLEANER, CODER, PLANNER, REPAIR, TESTER, Phase
+from .verdict import VERDICT_PATH, Verdict, clear_verdict, format_failures, read_verdict
 
 # Default model per phase: spend on the hard reasoning steps, save on the rest.
 # Overridden wholesale by an explicit --model on the CLI.
@@ -31,8 +32,12 @@ _DEFAULT_MODELS = {
     "coder": "opus",
     "tester": "sonnet",
     "benchmarker": "sonnet",
+    "repair": "opus",  # Fixing real bugs is hard reasoning — use the strong model.
     "cleaner": "sonnet",
 }
+
+# How many times the orchestrator will repair-and-re-verify before giving up.
+_MAX_REPAIR_ATTEMPTS = 2
 
 _LOG_DIR_NAME = ".replicator/logs"
 
@@ -46,13 +51,20 @@ def _short(text: str, limit: int = 500) -> str:
     return text if len(text) <= limit else text[:limit] + " […]"
 
 
-async def _run_phase(phase: Phase, repo: Path, model: str) -> None:
-    """Run one sub-agent to completion, streaming progress and logging the transcript."""
-    log_path = repo / _LOG_DIR_NAME / f"{phase.name}.log"
+async def _run_phase(
+    phase: Phase, repo: Path, model: str, *, label: str | None = None, **task_kwargs: str
+) -> None:
+    """Run one sub-agent to completion, streaming progress and logging the transcript.
+
+    ``label`` overrides the log filename and header (so repeated phases like repair
+    get one log per attempt). ``task_kwargs`` fill placeholders in the phase task.
+    """
+    label = label or phase.name
+    log_path = repo / _LOG_DIR_NAME / f"{label}.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log = log_path.open("w")
 
-    print(f"\n{'=' * 70}\n▶  {phase.name.upper()}  (model: {model})\n{'=' * 70}")
+    print(f"\n{'=' * 70}\n▶  {label.upper()}  (model: {model})\n{'=' * 70}")
     options = ClaudeAgentOptions(
         system_prompt=phase.system_prompt(),
         cwd=str(repo),
@@ -61,7 +73,7 @@ async def _run_phase(phase: Phase, repo: Path, model: str) -> None:
         max_turns=phase.max_turns,
         model=model,
     )
-    task = phase.task.format(pdf=_paper_pdf(repo))
+    task = phase.task.format(**task_kwargs)
 
     try:
         async for message in query(prompt=task, options=options):
@@ -75,7 +87,7 @@ async def _run_phase(phase: Phase, repo: Path, model: str) -> None:
                         print(f"  [{_now()}] · {block.name}{target}")
                         log.write(f"[tool] {block.name} {block.input}\n")
             elif isinstance(message, ResultMessage):
-                print(f"  [{_now()}] ✔ {phase.name} finished ({message.subtype})")
+                print(f"  [{_now()}] ✔ {label} finished ({message.subtype})")
                 log.write(f"\n[result] {message.subtype}\n")
     finally:
         log.close()
@@ -116,13 +128,77 @@ def _checkpoint(repo: Path) -> bool:
         return False
 
 
+def _model(phase: Phase, override: str | None) -> str:
+    return override or _DEFAULT_MODELS[phase.name]
+
+
+async def _verify_and_repair(repo: Path, model_override: str | None) -> bool:
+    """Run the judging phases; on a failure verdict, repair and re-verify.
+
+    Each round runs the tester then the benchmarker. They only diagnose — a failing
+    verdict triggers a Repair phase (fed the recorded failures), after which the whole
+    round restarts so the fix is re-verified. Returns True once both judges pass within
+    the repair budget, False if failures remain after :data:`_MAX_REPAIR_ATTEMPTS`.
+    """
+    attempts = 0
+    while True:
+        failure: Verdict | None = None
+        for judge in (TESTER, BENCHMARKER):
+            clear_verdict(repo)
+            await _run_phase(judge, repo, _model(judge, model_override))
+            verdict = read_verdict(repo)
+            if verdict is None:
+                print(f"  ⚠️  {judge.name} wrote no verdict; assuming it passed.")
+                continue
+            if not verdict.passed:
+                print(f"  ✗ {judge.name} verdict: FAIL ({len(verdict.failures)} issue(s)).")
+                failure = verdict
+                break  # Repair before running the next judge.
+            print(f"  ✓ {judge.name} verdict: PASS.")
+
+        if failure is None:
+            return True
+        if attempts >= _MAX_REPAIR_ATTEMPTS:
+            return False
+
+        attempts += 1
+        print(
+            f"\n🔧 Repair attempt {attempts}/{_MAX_REPAIR_ATTEMPTS} "
+            f"(triggered by {failure.phase})."
+        )
+        await _run_phase(
+            REPAIR,
+            repo,
+            _model(REPAIR, model_override),
+            label=f"repair-{attempts}",
+            pdf=_paper_pdf(repo),
+            failures=format_failures([failure]),
+        )
+
+
 async def run_pipeline(repo: Path, model_override: str | None = None) -> None:
-    """Run all phases over ``repo`` in order, pausing at the planning checkpoint."""
+    """Run the replication pipeline over ``repo``.
+
+    Flow: plan → (human checkpoint) → code → verify-and-repair → clean. The cleaner
+    only runs over an implementation that passed the judging phases; if repair cannot
+    make it pass, the pipeline stops and reports the outstanding failures honestly.
+    """
     print(f"\nBaseline replicator → {repo}")
-    for phase in PHASES:
-        model = model_override or _DEFAULT_MODELS[phase.name]
-        await _run_phase(phase, repo, model)
-        if phase.checkpoint_after and not _checkpoint(repo):
-            print("\n✋ Stopped at planning checkpoint. The plan is in PLAN.md.")
-            sys.exit(0)
+
+    await _run_phase(PLANNER, repo, _model(PLANNER, model_override), pdf=_paper_pdf(repo))
+    if not _checkpoint(repo):
+        print("\n✋ Stopped at planning checkpoint. The plan is in PLAN.md.")
+        sys.exit(0)
+
+    await _run_phase(CODER, repo, _model(CODER, model_override))
+
+    if not await _verify_and_repair(repo, model_override):
+        print(
+            f"\n⚠️  Stopping before cleanup: the implementation still fails after "
+            f"{_MAX_REPAIR_ATTEMPTS} repair attempt(s).\n"
+            f"    See REPORT.md and {VERDICT_PATH} for the outstanding failures."
+        )
+        sys.exit(1)
+
+    await _run_phase(CLEANER, repo, _model(CLEANER, model_override))
     print(f"\n✅ Done. Replicated baseline is in {repo} (see README.md and REPORT.md).")
