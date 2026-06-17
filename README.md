@@ -5,6 +5,7 @@
 > and easy to drop in as a baseline.
 
 **Team:** Arya · Olga · Sahel
+
 **Day-5 demo targets (Fri 19 Jun):**
 1. Eval dataset and pipeline
 2. Agent in action
