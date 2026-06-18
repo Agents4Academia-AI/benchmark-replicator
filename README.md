@@ -29,28 +29,6 @@ The default smoke run is intentionally cheap — minutes, on CPU or modest hardw
 feasible. Paper-scale configs may require a GPU; they ship as documented config, not as
 something the pipeline runs.
 
-## How it works
-
-A deterministic Python orchestrator (`replicator/pipeline.py`) runs five scoped sub-agents,
-each its own [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-python)
-`query()` with a restricted tool set. They share state through files in the generated repo:
-
-```
-paper (arXiv URL/id, PDF URL, or local PDF) → fetch PDF → [planner] → ⏸ you approve PLAN.md ⏸
-                                 → [coder] → [tester] → [benchmarker] → [cleaner]
-```
-
-| Sub-agent     | Scope                                                              | Writes        |
-|---------------|-------------------------------------------------------------------|---------------|
-| planner       | read paper, pick the main method, plan a reference impl + run modes| `PLAN.md`     |
-| coder         | implement the real method structure cleanly and modularly         | source        |
-| tester        | small, fast, deterministic pytest suite (shapes, smoke, invariants)| `tests/`      |
-| benchmarker   | run the smoke config, check criteria, report fidelity + gap        | `REPORT.md`   |
-| cleaner       | simplify, lint/format, write the repo's README                    | `README.md`   |
-
-After planning, the pipeline **pauses for your approval** of `PLAN.md` before any code is
-written.
-
 ## Installation
 
 Requires Python ≥ 3.14.
@@ -114,6 +92,28 @@ toward paper-like experiments. Per-phase transcripts are saved under `<repo>/.re
 > Run modes today are config files inside the generated repo (smoke vs. reference/scale-up).
 > A future CLI `--mode` could distinguish smoke / reference / harness runs directly; it is not
 > implemented yet.
+
+## How it works
+
+A deterministic Python orchestrator (`replicator/pipeline.py`) runs five scoped sub-agents,
+each its own [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-python)
+`query()` with a restricted tool set. They share state through files in the generated repo:
+
+```
+paper (arXiv URL/id, PDF URL, or local PDF) → fetch PDF → [planner] → ⏸ you approve PLAN.md ⏸
+                                 → [coder] → [tester] → [benchmarker] → [cleaner]
+```
+
+| Sub-agent     | Scope                                                              | Writes        |
+|---------------|-------------------------------------------------------------------|---------------|
+| planner       | read paper, pick the main method, plan a reference impl + run modes| `PLAN.md`     |
+| coder         | implement the real method structure cleanly and modularly         | source        |
+| tester        | small, fast, deterministic pytest suite (shapes, smoke, invariants)| `tests/`      |
+| benchmarker   | run the smoke config, check criteria, report fidelity + gap        | `REPORT.md`   |
+| cleaner       | simplify, lint/format, write the repo's README                    | `README.md`   |
+
+After planning, the pipeline **pauses for your approval** of `PLAN.md` before any code is
+written.
 
 ## Layout
 
