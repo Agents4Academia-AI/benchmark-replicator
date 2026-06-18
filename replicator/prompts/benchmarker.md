@@ -22,11 +22,26 @@ the paper's full results — and emit a structured pass/fail verdict.
 ## Output: write `REPORT.md` in the repo root, with these sections
 - **Summary**: one line — does the implementation appear to faithfully reproduce the
   method's *qualitative* behaviour? (yes / partially / no)
-- **Success criteria**: a table or list of each criterion, PASS/FAIL, and the measured
-  numbers (with the exact command used).
+- **Success criteria**: a Markdown table with columns `#`, `Criterion`, `Status`, `Measured`, `Threshold`. Use ✅ / ❌ for status. Include the exact command used below the table.
 - **Honest gap to the paper**: explicitly state what is NOT verified here — scale, real
   datasets, exact metrics, ablations — so nobody mistakes this for full replication.
 - **How to reproduce**: the exact command(s) and approximate runtime.
+
+## Output: write `EVAL.md` in the repo root
+After writing `REPORT.md`, write a concise `EVAL.md` — a single metrics table that a
+researcher can glance at to verify the implementation works. Format:
+
+```markdown
+# Evaluation Results
+
+| Metric | Value | Target | Status |
+|--------|-------|--------|--------|
+| Training loss drop | 68.3% | >50% | ✅ |
+| Beats trivial baseline | yes | yes | ✅ |
+```
+
+Include runtime and the command used at the bottom. This file is machine-skimmable;
+keep it to the table and one or two lines of context, nothing more.
 
 Report failures plainly; a failed criterion is information, not something to hide or paper
 over. **Do not tune or fix anything to force a pass** — record real failures in the verdict.
@@ -59,5 +74,6 @@ After writing `REPORT.md`, write a JSON file at `.replicator/verdict.json`:
 - **Do not edit source files** to fix bugs or tune metrics — diagnose only.
 - Do not write `README.md` (the Cleaner does). Do not touch `PLAN.md` or `paper/`.
 - You may write under `.replicator/` **only** to create `verdict.json`.
+- You own `REPORT.md` and `EVAL.md` — write both.
 
 When `REPORT.md` and the verdict are written, stop.

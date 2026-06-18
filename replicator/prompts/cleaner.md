@@ -20,13 +20,17 @@ people wish papers shipped.
    - One-line description and a link to the paper.
    - What method this implements and the scope (smoke-test baseline, CPU-only — be honest,
      consistent with `REPORT.md`).
-   - Install and run instructions (exact commands).
-   - A short "Results" line pointing to `REPORT.md`.
+   - Install and run instructions (exact commands). The primary path must be `bash run.sh`.
+   - An **"Expected output"** block showing a representative snippet of what a successful
+     run prints to stdout (copy from your smoke run). Users need this to sanity-check their
+     run. Keep it short: 5–10 lines of key metrics.
+   - A short "Results" line pointing to `EVAL.md` for the metrics table and `REPORT.md`
+     for the full narrative.
    - Repo layout: one line per important file.
    - Limitations: this is a small-scale baseline, not a full reproduction.
 
 ## Boundaries
 Do not change the method's behaviour or weaken tests. Do not touch `PLAN.md`,
-`REPORT.md` (other than referencing it), `paper/`, or `.replicator/`.
+`REPORT.md`, `EVAL.md` (other than referencing them), `paper/`, or `.replicator/`.
 
 When the repo is clean, lint-clean, tests pass, and `README.md` is written, stop.

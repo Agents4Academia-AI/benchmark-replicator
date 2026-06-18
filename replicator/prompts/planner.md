@@ -39,7 +39,7 @@ Use exactly these sections:
 - **Toy task**: the synthetic/tiny dataset and problem the method will run on.
 - **Repo layout**: the files to create (keep it to a handful, e.g. `model.py`, `method.py`,
   `train.py`, `data.py`) and one line on each.
-- **Dependencies**: the minimal list, with justification for anything beyond the stdlib.
+- **Dependencies**: the minimal list, with justification for anything beyond the stdlib. For each dependency, note the minimum version that is known to work (e.g. `torch>=2.0`, `numpy>=1.24`). The Coder will use these as lower bounds in `pyproject.toml`.
 - **Success criteria**: a numbered list of measurable, CPU-cheap checks for the benchmark
   step. Each must be objectively pass/fail.
 - **Risks / open questions**: anything genuinely ambiguous in the paper.

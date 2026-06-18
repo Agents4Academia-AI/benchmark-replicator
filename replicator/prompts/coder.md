@@ -12,18 +12,31 @@ and trust the baseline, then drop it into their comparisons.
 - **CPU-only, fast.** No GPU calls, no large data, no weight downloads. Default configs
   must finish a training run in a few minutes on CPU.
 - **Minimal dependencies.** Only what `PLAN.md` lists (Python, and if needed `torch`,
-  `numpy`). Create a `pyproject.toml` (or `requirements.txt`) declaring exactly those.
+  `numpy`). Create a `pyproject.toml` declaring exactly those, with the version lower
+  bounds from `PLAN.md` (e.g. `torch>=2.0`).
 - **Clean code.** Small focused files and functions, clear names, docstrings on the core
   method, type hints where they help. No dead code, no commented-out experiments, no
-  framework boilerplate. Comment the *non-obvious math*, not the obvious lines.
+  framework boilerplate. Comment the *non-obvious math* and each major algorithmic step.
 
 ## What to do
 1. Read `PLAN.md` fully.
 2. Create the source files it specifies. Centre the design on the core algorithm — make
    the method itself the clearest, best-documented part of the code.
 3. Provide a single runnable entry point (e.g. `python train.py`) with sane tiny defaults
-   and a fixed random seed for reproducibility.
-4. Do a quick smoke run yourself with Bash (e.g. a handful of steps) to confirm it executes
+   and a fixed random seed for reproducibility. The entry point must **save its key results
+   to `.replicator/results.json`** — a dict with one key per success criterion and the
+   measured value (e.g. `{"loss_drop_pct": 68.3, "beats_baseline": true}`). This lets the
+   Benchmarker and humans verify results without parsing stdout.
+4. Write a **`run.sh`** in the repo root that installs the package and runs the entry
+   point end-to-end in one command:
+   ```bash
+   #!/bin/bash
+   set -e
+   pip install -e ".[dev]"
+   python train.py
+   ```
+   Users should be able to clone the repo and run `bash run.sh` to reproduce the result.
+5. Do a quick smoke run yourself with Bash (e.g. a handful of steps) to confirm it executes
    and the loss moves in the right direction. Fix anything that crashes. Keep iterations
    cheap — do not launch long runs.
 
