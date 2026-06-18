@@ -42,8 +42,8 @@ class Phase:
         return (_PROMPTS_DIR / f"{self.name}.md").read_text()
 
 
-# The phases. ``{pdf}`` in the planner task and ``{failures}`` in the repair task
-# are filled in by the orchestrator. The orchestrator decides the control flow:
+# The phases. ``{sources}`` in the planner task, ``{pdf}`` and ``{failures}`` in the
+# repair task are filled in by the orchestrator. The orchestrator decides the control flow:
 # planner → coder → (tester → benchmarker, with repair + re-verify on failure) →
 # cleaner. The judging phases (tester, benchmarker) only diagnose and write a
 # verdict; the repair phase does the fixing.
@@ -51,7 +51,7 @@ class Phase:
 PLANNER = Phase(
     name="planner",
     task=(
-        "Read the paper PDF at `{pdf}` and write `PLAN.md` for a minimal, CPU-only "
+        "Read the paper ({sources}) and write `PLAN.md` for a minimal, CPU-only "
         "smoke-test implementation of its main method, following your instructions."
     ),
     # Planner reads the paper, may search the web for context, writes only PLAN.md.

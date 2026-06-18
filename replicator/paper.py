@@ -7,6 +7,7 @@ has no dependencies beyond the Claude Agent SDK itself.
 from __future__ import annotations
 
 import re
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -20,6 +21,7 @@ _URL_RE = re.compile(rf"arxiv\.org/(?:abs|pdf)/(?P<id>{_ARXIV_ID})", re.IGNORECA
 _BARE_RE = re.compile(rf"^(?P<id>{_ARXIV_ID})$", re.IGNORECASE)
 
 _PDF_URL = "https://arxiv.org/pdf/{id}"
+_HTML_URL = "https://arxiv.org/html/{id}"
 # arXiv blocks the default urllib user agent; pretend to be a normal browser.
 _USER_AGENT = "Mozilla/5.0 (compatible; baseline-replicator/0.1)"
 
@@ -56,3 +58,30 @@ def download_pdf(arxiv_id: str, dest_dir: Path) -> Path:
         raise RuntimeError(f"Downloaded an empty PDF from {url}")
     pdf_path.write_bytes(data)
     return pdf_path
+
+
+def download_html(arxiv_id: str, dest_dir: Path) -> Path | None:
+    """Download arXiv's HTML rendering of the paper, if one exists.
+
+    arXiv only publishes HTML for papers with usable LaTeX source (roughly 2023
+    onward); many papers have none, in which case this returns None and the
+    caller falls back to the PDF. A 404 is the normal "not available" signal.
+
+    If the file already exists it is reused, like :func:`download_pdf`.
+    """
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    html_path = dest_dir / f"{arxiv_id.replace('/', '_')}.html"
+    if html_path.exists() and html_path.stat().st_size > 0:
+        return html_path
+
+    url = _HTML_URL.format(id=arxiv_id)
+    request = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            data = response.read()
+    except urllib.error.URLError:  # HTTPError (404) is a subclass — covers "no HTML"
+        return None
+    if not data:
+        return None
+    html_path.write_bytes(data)
+    return html_path

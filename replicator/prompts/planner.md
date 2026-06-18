@@ -19,7 +19,8 @@ read and trust. We are NOT reproducing the paper's full experiments or exact num
   algorithm and ignore the rest.
 
 ## What to do
-1. Read the paper PDF (its path is given in your task) and any other context provided.
+1. Read the paper — your task names the available sources; prefer the HTML rendering when
+   present, and consult the PDF for figures or anything ambiguous. Use any other context provided.
 2. Identify the *one* core method/algorithm and the minimal math needed to implement it.
 3. Design the smallest possible faithful implementation: a toy task, a tiny model/config,
    and a short training loop that exercises the method.

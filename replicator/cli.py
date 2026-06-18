@@ -11,7 +11,7 @@ import argparse
 import asyncio
 from pathlib import Path
 
-from .paper import download_pdf, parse_arxiv_id
+from .paper import download_html, download_pdf, parse_arxiv_id
 from .pipeline import run_pipeline
 
 
@@ -46,6 +46,8 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Paper: arXiv:{arxiv_id}")
     pdf_path = download_pdf(arxiv_id, repo / "paper")
     print(f"PDF:   {pdf_path}")
+    html_path = download_html(arxiv_id, repo / "paper")
+    print(f"HTML:  {html_path}" if html_path else "HTML:  (none — planner will read the PDF)")
 
     asyncio.run(run_pipeline(repo, model_override=args.model))
 

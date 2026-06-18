@@ -119,9 +119,28 @@ def _tool_target(tool_input: dict) -> str:
 
 
 def _paper_pdf(repo: Path) -> str:
-    """Path to the downloaded paper PDF, relative to the repo (for the planner task)."""
+    """Path to the downloaded paper PDF, relative to the repo (for the repair task)."""
     pdfs = sorted((repo / "paper").glob("*.pdf"))
     return f"paper/{pdfs[0].name}" if pdfs else "paper/"
+
+
+def _paper_sources(repo: Path) -> str:
+    """Describe the reading sources for the planner, preferring HTML when present.
+
+    arXiv's HTML rendering (when it exists) is cleaner and far cheaper to read than
+    the PDF page-images, but it carries no figures — so the PDF stays the figure and
+    tie-break authority. When there is no HTML, this degrades to the PDF alone.
+    """
+    pdf = _paper_pdf(repo)
+    htmls = sorted((repo / "paper").glob("*.html"))
+    if htmls:
+        return (
+            f"an HTML rendering is at `paper/{htmls[0].name}` — prefer it, its text and "
+            f"equations are cleaner and far cheaper to read; the PDF at `{pdf}` is "
+            f"authoritative and the only source with figures, so consult it for figures "
+            f"or anything the HTML renders ambiguously"
+        )
+    return f"the PDF is at `{pdf}`"
 
 
 def _checkpoint(repo: Path) -> bool:
@@ -230,7 +249,9 @@ async def run_pipeline(repo: Path, model_override: str | None = None) -> None:
     all_usages: list[_PhaseUsage] = []
 
     all_usages.append(
-        await _run_phase(PLANNER, repo, _model(PLANNER, model_override), pdf=_paper_pdf(repo))
+        await _run_phase(
+            PLANNER, repo, _model(PLANNER, model_override), sources=_paper_sources(repo)
+        )
     )
     if not _checkpoint(repo):
         print("\n✋ Stopped at planning checkpoint. The plan is in PLAN.md.")
