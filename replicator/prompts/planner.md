@@ -26,12 +26,20 @@ promise full reproduction of the paper's experiments or exact table numbers.
 ## What to do
 1. Read the paper — your task names the available sources; prefer the HTML rendering when
    present, and consult the PDF for figures or anything ambiguous. Use any other context provided.
-2. Identify the *one* core method/algorithm and the math needed to implement it faithfully.
-3. Design a reference-level implementation: the real method structure, a small but realistic
+2. **Check for external paper artifacts** before planning. Inspect the available sources (paper
+   text, arXiv page, project page, author GitHub) for: official code links, model checkpoints,
+   dataset links, benchmark names, the paper's headline claims, and any stated compute/hardware
+   requirements. Keep this lightweight and conservative:
+   - Missing artifacts are fine — record "none found" rather than guessing.
+   - Do **not** invent links, datasets, checkpoints, or benchmark names.
+   - Prefer official sources from the paper, arXiv page, project page, or author GitHub.
+   - Mark anything you are unsure about as uncertain.
+3. Identify the *one* core method/algorithm and the math needed to implement it faithfully.
+4. Design a reference-level implementation: the real method structure, a small but realistic
    dataset/task where practical (prefer this over a purely synthetic toy), and configs for at
    least two run modes — a cheap **smoke** config and a **reference/scale-up** config closer
    to the paper (even if the latter is not run by default).
-4. Define **concrete, cheap success criteria** for the smoke run that the benchmark step can
+5. Define **concrete, cheap success criteria** for the smoke run that the benchmark step can
    check automatically — e.g. "smoke training loss drops by >50% over N steps", "method beats
    a trivial baseline on the smoke task", plus **method invariants** (e.g. a distribution sums
    to 1, an update has the expected sign). Verify the smoke run and method correctness — do
@@ -42,6 +50,10 @@ Write a single file `PLAN.md` in the repo root. Do not write any other files or 
 Use exactly these sections:
 
 - **Paper**: title, authors, and a link to the paper (the source link recorded in `paper/SOURCE.txt`, or its arXiv id).
+- **Artifacts checked**: what you found (or did not) for each of — paper, official code,
+  checkpoints, datasets, benchmarks — with links or "none found". Do not invent any of these;
+  mark uncertain entries as uncertain.
+- **Claim under test**: one sentence describing the specific claim the generated repo will test.
 - **Main method**: 1–2 paragraphs, plain language, plus the key equations/update rule.
 - **Reference implementation scope**: what the repo implements — the real method structure
   you will preserve and the realistic (small) task it runs on.
@@ -56,12 +68,16 @@ Use exactly these sections:
 - **Configs and run modes**: at least two — a cheap **smoke** config (the default) and a
   **reference/scale-up** config closer to the paper. State the key differences (data size,
   model size, steps, hardware) and which is run by default.
+- **Compute budget**: the expected default hardware, runtime, and network needs for the smoke
+  run, plus any paper-scale hardware noted in the paper (mark as uncertain if not stated).
 - **Smoke-run success criteria**: a numbered list of measurable, cheap checks for the
   benchmark step — covering the smoke run *and* method invariants. Each must be objectively
   pass/fail. Do not phrase any criterion as matching paper-scale numbers.
 - **Path to paper-scale experiments**: concretely, what a researcher changes (config knobs,
   data, hardware, expected cost) to push toward paper-like results. This is documentation,
   not something the pipeline runs.
+- **Gap to paper**: what the generated repo will *not* reproduce (experiments, datasets,
+  benchmarks, or claims left out of scope).
 - **Risks / open questions**: anything genuinely ambiguous in the paper.
 
 Keep `PLAN.md` tight and skimmable. When you have written it, stop.
