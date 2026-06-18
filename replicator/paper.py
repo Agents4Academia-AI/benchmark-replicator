@@ -1,4 +1,4 @@
-"""Resolve an arXiv URL to a paper id and download its PDF.
+"""Acquire a paper PDF from an arXiv URL/id, a direct PDF URL, or a local file.
 
 Kept deliberately small: only the standard library is used so the orchestrator
 has no dependencies beyond the Claude Agent SDK itself.
@@ -6,10 +6,13 @@ has no dependencies beyond the Claude Agent SDK itself.
 
 from __future__ import annotations
 
+import hashlib
 import re
+import shutil
 import urllib.error
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlparse
 
 # Matches the id in forms like:
 #   https://arxiv.org/abs/2017.12345
@@ -85,3 +88,61 @@ def download_html(arxiv_id: str, dest_dir: Path) -> Path | None:
         return None
     html_path.write_bytes(data)
     return html_path
+
+
+def repo_name_for_source(source: str) -> str:
+    """Default output-directory name for a non-arXiv source (URL or local path)."""
+    digest = hashlib.sha256(source.encode()).hexdigest()[:8]
+    return f"pdf-{digest}"
+
+
+def _pdf_filename_from_url(url: str) -> str:
+    """Pick a filename for a downloaded PDF from its URL, falling back to paper.pdf."""
+    name = Path(urlparse(url).path).name
+    name = re.sub(r"[^A-Za-z0-9._-]", "_", name)
+    if not name or not name.lower().endswith(".pdf"):
+        name = f"{name}.pdf" if name else "paper.pdf"
+    else:
+        name = name[: -len(".pdf")] + ".pdf"
+    return name
+
+
+def download_pdf_from_url(url: str, dest_dir: Path) -> Path:
+    """Download an arbitrary PDF ``url`` into ``dest_dir`` and return its path.
+
+    Like :func:`download_pdf`, an existing file is reused. The downloaded bytes are
+    checked for a PDF header so a URL that returns an HTML error page fails loudly
+    instead of feeding garbage to the planner.
+    """
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    pdf_path = dest_dir / _pdf_filename_from_url(url)
+    if pdf_path.exists() and pdf_path.stat().st_size > 0:
+        return pdf_path
+
+    request = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+    with urllib.request.urlopen(request, timeout=60) as response:
+        data = response.read()
+    if not data:
+        raise RuntimeError(f"Downloaded an empty PDF from {url}")
+    if not data.startswith(b"%PDF-"):
+        raise RuntimeError(f"{url} did not return a PDF (no %PDF- header)")
+    pdf_path.write_bytes(data)
+    return pdf_path
+
+
+def copy_local_pdf(src: Path, dest_dir: Path) -> Path:
+    """Copy a local PDF at ``src`` into ``dest_dir`` and return the new path."""
+    if not src.is_file():
+        raise FileNotFoundError(f"No such PDF file: {src}")
+    if src.read_bytes()[:5] != b"%PDF-":
+        raise ValueError(f"{src} is not a PDF (no %PDF- header)")
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    name = re.sub(r"[^A-Za-z0-9._-]", "_", src.name) or "paper.pdf"
+    if not name.lower().endswith(".pdf"):
+        name = f"{name}.pdf"
+    else:
+        name = name[: -len(".pdf")] + ".pdf"
+    dest = dest_dir / name
+    if not (dest.exists() and dest.stat().st_size > 0):
+        shutil.copy2(src, dest)
+    return dest

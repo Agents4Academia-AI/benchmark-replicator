@@ -1,6 +1,6 @@
 # Benchmark Replicator
 
-> Give it an arXiv paper, get back a **clean, minimal, single-purpose repo**
+> Give it an arXiv paper or any PDF, get back a **clean, minimal, single-purpose repo**
 > that implements the paper's main method -- simple enough to read and trust,
 > and easy to drop in as a baseline.
 
@@ -30,7 +30,7 @@ each its own [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-p
 `query()` with a restricted tool set. They share state through files in the generated repo:
 
 ```
-arxiv URL → download PDF → [planner] → ⏸ you approve PLAN.md ⏸
+paper (arXiv URL/id, PDF URL, or local PDF) → fetch PDF → [planner] → ⏸ you approve PLAN.md ⏸
                                  → [coder] → [tester] → [benchmarker] → [cleaner]
 ```
 
@@ -69,6 +69,14 @@ With uv:
 uv run replicate https://arxiv.org/abs/<id>
 ```
 
+The input can be an arXiv URL/id, a direct PDF URL, or a local PDF path:
+
+```bash
+uv run replicate https://arxiv.org/abs/<id>      # arXiv (also fetches the HTML rendering when available)
+uv run replicate https://example.com/paper.pdf   # any direct PDF URL
+uv run replicate ./paper.pdf                     # a local PDF
+```
+
 With plain Python (after `pip install .`):
 
 ```bash
@@ -80,11 +88,11 @@ python -m replicator.cli https://arxiv.org/abs/<id>
 Options (all forms):
 
 ```
---out DIR      output directory (default: replications/<arxiv-id>)
+--out DIR      output directory (default: replications/<arxiv-id> or replications/pdf-<hash>)
 --model MODEL  override the model for all phases (default: opus for plan/code, sonnet otherwise)
 ```
 
-The generated baseline lands in `replications/<arxiv-id>/` — a standalone repo with its own
+The generated baseline lands in the output directory — a standalone repo with its own
 `README.md`, `PLAN.md`, `REPORT.md`, source, and tests. Per-phase transcripts are saved under
 `<repo>/.replicator/logs/`.
 
@@ -93,7 +101,7 @@ The generated baseline lands in `replications/<arxiv-id>/` — a standalone repo
 ```
 replicator/
 ├── cli.py        # argument parsing + entry point
-├── paper.py      # arXiv URL → id, PDF download (stdlib only)
+├── paper.py      # arXiv/PDF URL or local file → PDF (stdlib only)
 ├── phases.py     # the five sub-agents: scope, tools, prompts, turn caps
 ├── pipeline.py   # orchestrator: runs phases, streams progress, planning checkpoint
 └── prompts/      # one system prompt per sub-agent

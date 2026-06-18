@@ -1,7 +1,7 @@
 [project]
 name = "baseline-replicator"
 version = "0.1.0"
-description = "Turn an arXiv paper into a clean, minimal, CPU-runnable baseline implementation using scoped Claude Agent SDK sub-agents."
+description = "Turn an arXiv paper or any PDF into a clean, minimal, CPU-runnable baseline implementation using scoped Claude Agent SDK sub-agents."
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [

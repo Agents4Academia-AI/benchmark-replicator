@@ -132,15 +132,19 @@ def _paper_sources(repo: Path) -> str:
     tie-break authority. When there is no HTML, this degrades to the PDF alone.
     """
     pdf = _paper_pdf(repo)
+    source_file = repo / "paper" / "SOURCE.txt"
+    link = ""
+    if source_file.exists():
+        link = f"; the paper's source link is `{source_file.read_text().strip()}`"
     htmls = sorted((repo / "paper").glob("*.html"))
     if htmls:
         return (
             f"an HTML rendering is at `paper/{htmls[0].name}` — prefer it, its text and "
             f"equations are cleaner and far cheaper to read; the PDF at `{pdf}` is "
             f"authoritative and the only source with figures, so consult it for figures "
-            f"or anything the HTML renders ambiguously"
+            f"or anything the HTML renders ambiguously{link}"
         )
-    return f"the PDF is at `{pdf}`"
+    return f"the PDF is at `{pdf}`{link}"
 
 
 def _checkpoint(repo: Path) -> bool:

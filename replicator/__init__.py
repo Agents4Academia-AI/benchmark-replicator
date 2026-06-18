@@ -1,4 +1,4 @@
-"""Baseline Replicator — turn an arXiv paper into a clean, minimal reference implementation.
+"""Baseline Replicator — turn a paper into a clean, minimal reference implementation.
 
 A code-driven pipeline of scoped Claude Agent SDK sub-agents
 (plan -> code -> test -> benchmark -> clean) that implement a paper's main

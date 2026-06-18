@@ -32,7 +32,7 @@ read and trust. We are NOT reproducing the paper's full experiments or exact num
 Write a single file `PLAN.md` in the repo root. Do not write any other files or code.
 Use exactly these sections:
 
-- **Paper**: title, authors, arXiv id/link.
+- **Paper**: title, authors, and a link to the paper (the source link recorded in `paper/SOURCE.txt`, or its arXiv id).
 - **Main method**: 1–2 paragraphs, plain language, plus the key equations/update rule.
 - **Scope & simplifications**: what you are implementing and, explicitly, what you are
   leaving out and why.

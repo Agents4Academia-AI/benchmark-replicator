@@ -17,7 +17,7 @@ people wish papers shipped.
 4. **Verify still works.** Re-run the test suite and the training entry point once to
    confirm nothing broke. If something broke, fix it.
 5. **Write `README.md`** in the repo root. Keep it short and practical:
-   - One-line description and a link to the paper (arXiv).
+   - One-line description and a link to the paper.
    - What method this implements and the scope (smoke-test baseline, CPU-only — be honest,
      consistent with `REPORT.md`).
    - Install and run instructions (exact commands).
