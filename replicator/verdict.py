@@ -40,15 +40,32 @@ class Verdict:
         return self.status == "pass"
 
 
-def read_verdict(repo: Path) -> Verdict | None:
-    """Read the current verdict, or ``None`` if it is missing or unparseable."""
+def read_verdict(repo: Path, expected_phase: str) -> Verdict:
+    """Read and validate the judging phase's verdict, treating any problem as a FAIL.
+
+    A judge that does not leave a clean, well-formed "pass" has not demonstrated
+    success — silently assuming a pass is the pipeline's biggest false-success risk.
+    So a missing file, unparseable JSON, a non-object payload, a phase that does not
+    match the judge that just ran, an unrecognised status, or a "pass" that still
+    lists failures all resolve to a failing verdict that triggers repair (or a stop).
+    """
     path = repo / VERDICT_PATH
+
+    def malformed(detail: str) -> Verdict:
+        return Verdict(
+            phase=expected_phase,
+            status="fail",
+            failures=[Failure(criterion="malformed verdict", detail=detail, evidence=VERDICT_PATH)],
+        )
+
     try:
         data = json.loads(path.read_text())
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return None
+    except (FileNotFoundError, OSError):
+        return malformed(f"{expected_phase} wrote no verdict at {VERDICT_PATH}.")
+    except json.JSONDecodeError as exc:
+        return malformed(f"{expected_phase}'s verdict is not valid JSON: {exc}.")
     if not isinstance(data, dict):
-        return None
+        return malformed(f"{expected_phase}'s verdict is not a JSON object.")
 
     failures = [
         Failure(
@@ -60,11 +77,17 @@ def read_verdict(repo: Path) -> Verdict | None:
         for f in data.get("failures", [])
         if isinstance(f, dict)
     ]
+    phase = str(data.get("phase", "")).strip().lower()
+    if phase != expected_phase:
+        return malformed(f"verdict phase {phase!r} does not match the {expected_phase} judge.")
     status = str(data.get("status", "")).strip().lower()
     if status not in ("pass", "fail"):
-        # Infer from the failures rather than trust a malformed status field.
-        status = "fail" if failures else "pass"
-    return Verdict(phase=str(data.get("phase", "")), status=status, failures=failures)
+        return malformed(f"verdict status {status!r} is not 'pass' or 'fail'.")
+    if status == "pass" and failures:
+        # A self-contradictory "pass" with recorded failures is not a pass; keep the
+        # recorded failures so Repair can act on the real issues.
+        return Verdict(phase=phase, status="fail", failures=failures)
+    return Verdict(phase=phase, status=status, failures=failures)
 
 
 def clear_verdict(repo: Path) -> None:

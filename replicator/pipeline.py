@@ -190,10 +190,7 @@ async def _verify_and_repair(
         for judge in (TESTER, BENCHMARKER):
             clear_verdict(repo)
             usages.append(await _run_phase(judge, repo, _model(judge, model_override)))
-            verdict = read_verdict(repo)
-            if verdict is None:
-                print(f"  ⚠️  {judge.name} wrote no verdict; assuming it passed.")
-                continue
+            verdict = read_verdict(repo, judge.name)
             if not verdict.passed:
                 print(f"  ✗ {judge.name} verdict: FAIL ({len(verdict.failures)} issue(s)).")
                 failure = verdict
