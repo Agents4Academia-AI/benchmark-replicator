@@ -3,8 +3,8 @@ method is implemented, tested, and benchmarked. Your job is to make the repo pol
 minimal, and ready for a researcher to clone and use as a baseline.
 
 ## Goal
-A repo that is clean, simple, honest, and trivially runnable — the kind of reference code
-people wish papers shipped.
+A repo that is clean, modular, honest, and trivially runnable — a reference-level
+implementation of the method, the kind of reference code people wish papers shipped.
 
 ## What to do
 1. **Simplify.** Read the source files and remove dead code, unused imports, leftover
@@ -18,16 +18,19 @@ people wish papers shipped.
    confirm nothing broke. If something broke, fix it.
 5. **Write `README.md`** in the repo root. Keep it short and practical:
    - One-line description and a link to the paper.
-   - What method this implements and the scope (smoke-test baseline, CPU-only — be honest,
-     consistent with `REPORT.md`).
-   - Install and run instructions (exact commands). The primary path must be `bash run.sh`.
+   - What method this implements and the scope — a reference-level implementation with a
+     cheap smoke run, be honest and consistent with `REPORT.md`.
+   - Install and run instructions (exact commands). The primary path must be `bash run.sh`
+     for the cheap smoke run. Note the available run modes / configs (smoke vs.
+     reference/scale-up) and how to select them.
    - An **"Expected output"** block showing a representative snippet of what a successful
-     run prints to stdout (copy from your smoke run). Users need this to sanity-check their
-     run. Keep it short: 5–10 lines of key metrics.
+     smoke run prints to stdout (copy from your smoke run). Users need this to sanity-check
+     their run. Keep it short: 5–10 lines of key metrics.
    - A short "Results" line pointing to `EVAL.md` for the metrics table and `REPORT.md`
      for the full narrative.
    - Repo layout: one line per important file.
-   - Limitations: this is a small-scale baseline, not a full reproduction.
+   - Limitations: a reference implementation verified by a cheap smoke run, not a full
+     paper-scale reproduction; point to the scale-up config / `PLAN.md` for that path.
 
 ## Boundaries
 Do not change the method's behaviour or weaken tests. Do not touch `PLAN.md`,

@@ -8,17 +8,23 @@ genuine bug in the source, you record it in the verdict; a separate Repair sub-a
 fix it and you will be re-run to re-check.
 
 ## Goal
-Give a researcher confidence the implementation is correct and reproducible — with tests
-that are fast, deterministic, and run on CPU — and emit an honest pass/fail verdict.
+Give a researcher confidence the implementation is correct, faithful, and reproducible —
+with tests that are fast, deterministic, and cheap (CPU or modest hardware, no large
+downloads) — and emit an honest pass/fail verdict.
 
 ## What to test (keep it minimal and high-value)
 1. **Shapes / wiring**: the model and core method produce outputs of the expected shape
    and type, and a forward + single update step runs without error.
-2. **It learns**: one short training run on the toy task reduces the loss (assert the final
-   loss is meaningfully below the initial loss). Keep step counts tiny so this is fast.
+2. **Smoke training / inference**: one short run on the smoke config reduces the loss
+   (assert the final loss is meaningfully below the initial loss) and inference runs end to
+   end. Keep step counts tiny so this is fast.
 3. **Determinism**: with a fixed seed, two short runs produce the same result.
-4. Any small method-specific invariant that is cheap to check (e.g. a probability sums to
-   1, an update has the expected sign). Use judgement; do not over-test.
+4. **Method invariants**: method-specific properties that establish fidelity to the paper
+   and are cheap to check (e.g. a probability distribution sums to 1, an update has the
+   expected sign, a normalization or conservation law holds). Use judgement; do not over-test.
+
+Tests must not require paper-scale compute or large downloads — exercise the smoke config
+and the method's invariants, not full-scale reproduction.
 
 ## What to do
 1. Read `PLAN.md` and the source files to understand the interfaces.

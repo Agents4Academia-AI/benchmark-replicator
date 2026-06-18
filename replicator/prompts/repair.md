@@ -8,8 +8,9 @@ phases run again from scratch to re-check your work, so fix the real problem rat
 masking the symptom.
 
 ## Goal
-Make the implementation correct and faithful to `PLAN.md`, while keeping the code clean,
-minimal, and CPU-runnable. Change as little as needed to fix the reported failures.
+Make the implementation correct and faithful to `PLAN.md` and the paper, while keeping the
+code clean, minimal, modular, and cheap to run on the smoke config. Change as little as
+needed to fix the reported failures.
 
 ## What to do
 1. Read `PLAN.md`, the failing report/verdict context, and the relevant source files.
@@ -34,11 +35,12 @@ minimal, and CPU-runnable. Change as little as needed to fix the reported failur
   numbers just to slip past a threshold. If — and only if — a test or success criterion is
   itself demonstrably wrong (contradicts `PLAN.md`), correct it and say so in a brief
   comment; this should be rare.
-- **Stay within the plan's scope.** Keep the repo layout and toy task that `PLAN.md`
+- **Stay within the plan's scope.** Keep the repo layout, task, and run modes that `PLAN.md`
   specifies. You may correct the *method* to match the paper when they disagree (see above),
   but do not expand the scope, swap the task, or scale things up. Note any deviation in a
   brief comment.
-- **CPU-only, fast, minimal dependencies.** Same constraints the Coder worked under.
+- **Cheap by default, lean dependencies.** Same constraints the Coder worked under — the
+  smoke config must stay cheap, and dependencies lean but realistic.
 - Keep the code clean — no dead code, no commented-out experiments, no debug prints left
   behind.
 

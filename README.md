@@ -1,8 +1,8 @@
 # Benchmark Replicator
 
-> Give it an arXiv paper or any PDF, get back a **clean, minimal, single-purpose repo**
-> that implements the paper's main method -- simple enough to read and trust,
-> and easy to drop in as a baseline.
+> Give it an arXiv paper or any PDF, get back a **clean, minimal, modular repo** that is a
+> **reference-level implementation** of the paper's main method -- faithful enough to read,
+> trust, and extend, and shipped with a **cheap smoke run** that verifies it works.
 
 **Team:** Arya · Olga · Sahel
 
@@ -15,13 +15,19 @@ code is missing, sloppy, or unrunnable.
 
 ## What it does (and doesn't)
 
-- ✅ Implements the paper's **one core method/algorithm** in clean Python (+`torch` if needed).
-- ✅ Verifies it **runs and learns** on a tiny, CPU-only smoke-test task.
+- ✅ Implements the paper's **one core method/algorithm** as a faithful, modular reference in
+  clean Python (`torch`/`numpy`, plus other common ML deps when justified).
+- ✅ Preserves the **real method structure** and exposes realistic config paths — a cheap
+  **smoke** config (run by default) and a **reference/scale-up** config closer to the paper.
+- ✅ Verifies the method **runs, learns, and respects its invariants** via a cheap smoke run,
+  and documents how to scale toward paper-like experiments.
 - ✅ Produces tests, an honest benchmark `REPORT.md`, and a `README.md` in the generated repo.
-- ❌ Does **not** reproduce full paper results, real datasets, or exact table numbers (v1).
+- ❌ Does **not** promise full paper reproduction, exact table numbers, or paper-scale
+  training by default.
 
-It is intentionally cheap: everything the generated repo runs finishes on a laptop CPU in
-minutes.
+The default smoke run is intentionally cheap — minutes, on CPU or modest hardware where
+feasible. Paper-scale configs may require a GPU; they ship as documented config, not as
+something the pipeline runs.
 
 ## How it works
 
@@ -36,10 +42,10 @@ paper (arXiv URL/id, PDF URL, or local PDF) → fetch PDF → [planner] → ⏸ 
 
 | Sub-agent     | Scope                                                              | Writes        |
 |---------------|-------------------------------------------------------------------|---------------|
-| planner       | read paper, pick the main method, plan a CPU smoke test           | `PLAN.md`     |
-| coder         | implement it cleanly with minimal deps                            | source        |
-| tester        | small, fast, deterministic pytest suite                           | `tests/`      |
-| benchmarker   | run it, check success criteria, report the honest gap to the paper| `REPORT.md`   |
+| planner       | read paper, pick the main method, plan a reference impl + run modes| `PLAN.md`     |
+| coder         | implement the real method structure cleanly and modularly         | source        |
+| tester        | small, fast, deterministic pytest suite (shapes, smoke, invariants)| `tests/`      |
+| benchmarker   | run the smoke config, check criteria, report fidelity + gap        | `REPORT.md`   |
 | cleaner       | simplify, lint/format, write the repo's README                    | `README.md`   |
 
 After planning, the pipeline **pauses for your approval** of `PLAN.md` before any code is
@@ -101,8 +107,13 @@ uv run replicate https://arxiv.org/abs/1706.03762 --instructions ./my_notes.md
 ```
 
 The generated baseline lands in the output directory — a standalone repo with its own
-`README.md`, `PLAN.md`, `REPORT.md`, source, and tests. Per-phase transcripts are saved under
-`<repo>/.replicator/logs/`.
+`README.md`, `PLAN.md`, `REPORT.md`, source, and tests. The pipeline runs the cheap **smoke**
+config; the generated repo also ships a **reference/scale-up** config for researchers to push
+toward paper-like experiments. Per-phase transcripts are saved under `<repo>/.replicator/logs/`.
+
+> Run modes today are config files inside the generated repo (smoke vs. reference/scale-up).
+> A future CLI `--mode` could distinguish smoke / reference / harness runs directly; it is not
+> implemented yet.
 
 ## Layout
 

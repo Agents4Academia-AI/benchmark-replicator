@@ -7,25 +7,34 @@ criterion fails because of a genuine bug, you record it in the verdict; a separa
 sub-agent will fix it and you will be re-run to re-check.
 
 ## Goal
-Verify each **success criterion** listed in `PLAN.md`, write an honest `REPORT.md` a
-researcher can trust — including a clear statement of the gap between this smoke-test and
-the paper's full results — and emit a structured pass/fail verdict.
+Verify each **smoke-run success criterion** listed in `PLAN.md`, write an honest `REPORT.md`
+a researcher can trust — separating what is verified, how faithful the implementation is to
+the paper, and what remains to reach paper-scale results — and emit a structured pass/fail
+verdict.
 
 ## What to do
-1. Read the **Success criteria** section of `PLAN.md`.
-2. Run the implementation's entry point on CPU (e.g. `python train.py`) using Bash. Keep
-   runs short and cheap; downscale further if anything is slow. Capture the metrics each
-   criterion needs (losses, accuracies, baseline comparisons, etc.).
+1. Read the **Smoke-run success criteria** section of `PLAN.md`.
+2. Run the implementation's entry point on the smoke config (e.g. `python train.py`) using
+   Bash, on CPU or modest hardware. Keep runs short and cheap; downscale further if anything
+   is slow. Capture the metrics each criterion needs (losses, accuracies, baseline
+   comparisons, invariants, etc.).
 3. For each criterion, determine objectively whether it **passed** or **failed**, with the
    numbers that justify the verdict. If a criterion cannot be checked cheaply, say so.
 
 ## Output: write `REPORT.md` in the repo root, with these sections
-- **Summary**: one line — does the implementation appear to faithfully reproduce the
-  method's *qualitative* behaviour? (yes / partially / no)
-- **Success criteria**: a Markdown table with columns `#`, `Criterion`, `Status`, `Measured`, `Threshold`. Use ✅ / ❌ for status. Include the exact command used below the table.
-- **Honest gap to the paper**: explicitly state what is NOT verified here — scale, real
-  datasets, exact metrics, ablations — so nobody mistakes this for full replication.
-- **How to reproduce**: the exact command(s) and approximate runtime.
+- **Summary**: one line — does the smoke run behave as the method predicts, qualitatively?
+  (yes / partially / no)
+- **Verified behavior**: a Markdown table of the smoke-run success criteria with columns `#`,
+  `Criterion`, `Status`, `Measured`, `Threshold`. Use ✅ / ❌ for status. Include the exact
+  command used below the table.
+- **Reference implementation fidelity**: which components/equations are implemented faithfully
+  to the paper (per `PLAN.md`), and which are simplified or omitted — so a reader knows how
+  much of the real method this code captures.
+- **What remains to reproduce paper-scale results**: explicitly state what is NOT verified
+  here — scale, real datasets, exact metrics, ablations, hardware — and point to the
+  reference/scale-up config and the "Path to paper-scale experiments" in `PLAN.md`. Nobody
+  should mistake this for full replication.
+- **How to reproduce**: the exact command(s) and approximate runtime for the smoke run.
 
 ## Output: write `EVAL.md` in the repo root
 After writing `REPORT.md`, write a concise `EVAL.md` — a single metrics table that a
@@ -64,9 +73,11 @@ After writing `REPORT.md`, write a JSON file at `.replicator/verdict.json`:
 }
 ```
 
-- `status` is `"pass"` only if every checkable success criterion passed; otherwise
+- `status` is `"pass"` only if every checkable smoke-run success criterion passed; otherwise
   `"fail"`. A criterion that genuinely cannot be checked cheaply is not a failure on its
-  own — note it in `REPORT.md` and do not let it flip the status.
+  own — note it in `REPORT.md` and do not let it flip the status. **Not reproducing
+  paper-scale numbers is never a failure** — these criteria only cover the smoke run and the
+  method's invariants.
 - On `"pass"`, `failures` must be an empty list. On `"fail"`, list at least one failure,
   most important first.
 
