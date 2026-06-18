@@ -242,7 +242,9 @@ def _print_cost_summary(usages: list[_PhaseUsage]) -> None:
     print(f"{'─' * 62}")
 
 
-async def run_pipeline(repo: Path, model_override: str | None = None) -> None:
+async def run_pipeline(
+    repo: Path, model_override: str | None = None, instructions: str = ""
+) -> None:
     """Run the replication pipeline over ``repo``.
 
     Flow: plan → (human checkpoint) → code → verify-and-repair → clean. The cleaner
@@ -252,9 +254,19 @@ async def run_pipeline(repo: Path, model_override: str | None = None) -> None:
     print(f"\nBaseline replicator → {repo}")
     all_usages: list[_PhaseUsage] = []
 
+    instructions_block = (
+        "\n\nAdditional instructions from the user (treat as authoritative):\n"
+        + instructions.strip()
+        if instructions.strip()
+        else ""
+    )
     all_usages.append(
         await _run_phase(
-            PLANNER, repo, _model(PLANNER, model_override), sources=_paper_sources(repo)
+            PLANNER,
+            repo,
+            _model(PLANNER, model_override),
+            sources=_paper_sources(repo),
+            instructions=instructions_block,
         )
     )
     if not _checkpoint(repo):

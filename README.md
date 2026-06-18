@@ -88,8 +88,16 @@ python -m replicator.cli https://arxiv.org/abs/<id>
 Options (all forms):
 
 ```
---out DIR      output directory (default: replications/<arxiv-id> or replications/pdf-<hash>)
---model MODEL  override the model for all phases (default: opus for plan/code, sonnet otherwise)
+--out DIR                output directory (default: replications/<arxiv-id> or replications/pdf-<hash>)
+--model MODEL            override the model for all phases (default: opus for plan/code, sonnet otherwise)
+--instructions TEXT|FILE extra instructions for the planner: literal text or a path to a file
+```
+
+Use `--instructions` to steer what the planner focuses on before it writes `PLAN.md`:
+
+```bash
+uv run replicate https://arxiv.org/abs/1706.03762 --instructions "focus only on scaled dot-product attention, skip multi-head"
+uv run replicate https://arxiv.org/abs/1706.03762 --instructions ./my_notes.md
 ```
 
 The generated baseline lands in the output directory — a standalone repo with its own

@@ -45,7 +45,20 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Override the model for every phase (e.g. 'opus', 'sonnet'). "
         "Default: opus for planning/coding, sonnet for the rest.",
     )
+    parser.add_argument(
+        "--instructions",
+        default=None,
+        help="Extra instructions for the planner: literal text, or a path to a "
+        "file whose contents are used (e.g. --instructions notes.md).",
+    )
     return parser.parse_args(argv)
+
+
+def _resolve_instructions(value: str | None) -> str:
+    if not value:
+        return ""
+    path = Path(value)
+    return path.read_text() if path.is_file() else value
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -81,7 +94,10 @@ def main(argv: list[str] | None = None) -> None:
 
     (repo / "paper" / "SOURCE.txt").write_text(link + "\n")
 
-    asyncio.run(run_pipeline(repo, model_override=args.model))
+    instructions = _resolve_instructions(args.instructions)
+    if instructions:
+        print(f"Instructions: {instructions[:80]}{'…' if len(instructions) > 80 else ''}")
+    asyncio.run(run_pipeline(repo, model_override=args.model, instructions=instructions))
 
 
 if __name__ == "__main__":
