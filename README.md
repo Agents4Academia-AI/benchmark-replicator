@@ -45,14 +45,43 @@ arxiv URL → download PDF → [planner] → ⏸ you approve PLAN.md ⏸
 After planning, the pipeline **pauses for your approval** of `PLAN.md` before any code is
 written.
 
-## Usage
+## Installation
+
+Requires Python ≥ 3.14.
+
+With [uv](https://docs.astral.sh/uv/) (recommended):
 
 ```bash
-uv sync
+uv sync          # install into the project's virtual environment
+```
+
+With pip:
+
+```bash
+pip install .    # or: pip install -e . for an editable install
+```
+
+## Usage
+
+With uv:
+
+```bash
 uv run replicate https://arxiv.org/abs/<id>
-# options:
-#   --out DIR      output directory (default: replications/<arxiv-id>)
-#   --model MODEL  override the model for all phases (default: opus for plan/code, sonnet otherwise)
+```
+
+With plain Python (after `pip install .`):
+
+```bash
+replicate https://arxiv.org/abs/<id>
+# or, without relying on the installed entry point:
+python -m replicator.cli https://arxiv.org/abs/<id>
+```
+
+Options (all forms):
+
+```
+--out DIR      output directory (default: replications/<arxiv-id>)
+--model MODEL  override the model for all phases (default: opus for plan/code, sonnet otherwise)
 ```
 
 The generated baseline lands in `replications/<arxiv-id>/` — a standalone repo with its own
