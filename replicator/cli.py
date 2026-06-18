@@ -77,7 +77,11 @@ def main(argv: list[str] | None = None) -> None:
         pdf_path = download_pdf(arxiv_id, repo / "paper")
         print(f"PDF:   {pdf_path}")
         html_path = download_html(arxiv_id, repo / "paper")
-        print(f"HTML:  {html_path}" if html_path else "HTML:  (none — planner will read the PDF)")
+        print(
+            f"HTML:  {html_path}"
+            if html_path
+            else "HTML:  (none — planner will read the PDF)"
+        )
         link = f"https://arxiv.org/abs/{arxiv_id}"
     else:
         repo = args.out or (Path("replications") / repo_name_for_source(source))
@@ -96,8 +100,12 @@ def main(argv: list[str] | None = None) -> None:
 
     instructions = _resolve_instructions(args.instructions)
     if instructions:
-        print(f"Instructions: {instructions[:80]}{'…' if len(instructions) > 80 else ''}")
-    asyncio.run(run_pipeline(repo, model_override=args.model, instructions=instructions))
+        print(
+            f"Instructions: {instructions[:80]}{'…' if len(instructions) > 80 else ''}"
+        )
+    asyncio.run(
+        run_pipeline(repo, model_override=args.model, instructions=instructions)
+    )
 
 
 if __name__ == "__main__":

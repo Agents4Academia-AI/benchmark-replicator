@@ -23,8 +23,16 @@ from claude_agent_sdk import (
     query,
 )
 
+from .criteria import mechanical_failures
 from .phases import BENCHMARKER, CLEANER, CODER, PLANNER, REPAIR, TESTER, Phase
-from .verdict import VERDICT_PATH, Verdict, clear_verdict, format_failures, read_verdict
+from .verdict import (
+    VERDICT_PATH,
+    Verdict,
+    clear_verdict,
+    format_failures,
+    read_verdict,
+    write_verdict,
+)
 
 # Default model per phase: spend on the hard reasoning steps, save on the rest.
 # Overridden wholesale by an explicit --model on the CLI.
@@ -61,7 +69,12 @@ def _short(text: str, limit: int = 500) -> str:
 
 
 async def _run_phase(
-    phase: Phase, repo: Path, model: str, *, label: str | None = None, **task_kwargs: str
+    phase: Phase,
+    repo: Path,
+    model: str,
+    *,
+    label: str | None = None,
+    **task_kwargs: str,
 ) -> _PhaseUsage:
     """Run one sub-agent to completion, streaming progress and logging the transcript.
 
@@ -158,7 +171,9 @@ def _checkpoint(repo: Path) -> bool:
         print(f"\n{'─' * 70}\n📋  PLAN.md (review before implementation)\n{'─' * 70}")
         print(plan.read_text() if plan.exists() else "  (PLAN.md was not created!)")
         print("─" * 70)
-        answer = input("Approve plan and continue? [y]es / [N]o / [e]dit PLAN.md then re-ask: ")
+        answer = input(
+            "Approve plan and continue? [y]es / [N]o / [e]dit PLAN.md then re-ask: "
+        )
         choice = answer.strip().lower()
         if choice in ("y", "yes"):
             return True
@@ -170,6 +185,28 @@ def _checkpoint(repo: Path) -> bool:
 
 def _model(phase: Phase, override: str | None) -> str:
     return override or _DEFAULT_MODELS[phase.name]
+
+
+def _apply_mechanical_check(repo: Path, verdict: Verdict) -> Verdict:
+    """Fold the deterministic criteria/results comparison into the benchmarker verdict.
+
+    The numeric and boolean smoke criteria are judged in Python, not by the LLM: any
+    required criterion that fails (or whose value is missing from ``results.json``) is
+    added to the verdict's failures, forcing a FAIL that triggers Repair regardless of
+    what the benchmarker concluded. When no valid ``criteria.json`` exists the check is
+    skipped and the benchmarker's own verdict stands.
+    """
+    failures, notes = mechanical_failures(repo)
+    for line in notes:
+        print(f"  · {line}")
+    if not failures:
+        return verdict
+    combined = list(verdict.failures) + [
+        f for f in failures if f not in verdict.failures
+    ]
+    verdict = Verdict(phase=verdict.phase, status="fail", failures=combined)
+    write_verdict(repo, verdict)
+    return verdict
 
 
 async def _verify_and_repair(
@@ -191,8 +228,12 @@ async def _verify_and_repair(
             clear_verdict(repo)
             usages.append(await _run_phase(judge, repo, _model(judge, model_override)))
             verdict = read_verdict(repo, judge.name)
+            if judge is BENCHMARKER:
+                verdict = _apply_mechanical_check(repo, verdict)
             if not verdict.passed:
-                print(f"  ✗ {judge.name} verdict: FAIL ({len(verdict.failures)} issue(s)).")
+                print(
+                    f"  ✗ {judge.name} verdict: FAIL ({len(verdict.failures)} issue(s))."
+                )
                 failure = verdict
                 break  # Repair before running the next judge.
             print(f"  ✓ {judge.name} verdict: PASS.")
@@ -228,7 +269,9 @@ def _print_cost_summary(usages: list[_PhaseUsage]) -> None:
     print(f"\n{'─' * 62}")
     print("  Cost summary")
     print(f"{'─' * 62}")
-    print(f"  {'Phase':<{w}}  {'Input tok':>10}  {'Output tok':>10}  {'Cost (USD)':>10}")
+    print(
+        f"  {'Phase':<{w}}  {'Input tok':>10}  {'Output tok':>10}  {'Cost (USD)':>10}"
+    )
     print(f"  {'─' * (w)}  {'─' * 10}  {'─' * 10}  {'─' * 10}")
     for u in usages:
         print(

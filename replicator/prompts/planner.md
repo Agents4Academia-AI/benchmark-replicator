@@ -46,8 +46,8 @@ promise full reproduction of the paper's experiments or exact table numbers.
    **not** require paper-scale reproduction.
 
 ## Output
-Write a single file `PLAN.md` in the repo root. Do not write any other files or code.
-Use exactly these sections:
+Write `PLAN.md` in the repo root, plus `.replicator/criteria.json` (described below). Do not
+write any other files or code. In `PLAN.md` use exactly these sections:
 
 - **Paper**: title, authors, and a link to the paper (the source link recorded in `paper/SOURCE.txt`, or its arXiv id).
 - **Artifacts checked**: what you found (or did not) for each of — paper, official code,
@@ -80,4 +80,46 @@ Use exactly these sections:
   benchmarks, or claims left out of scope).
 - **Risks / open questions**: anything genuinely ambiguous in the paper.
 
-Keep `PLAN.md` tight and skimmable. When you have written it, stop.
+## Machine-readable criteria: `.replicator/criteria.json`
+Also write `.replicator/criteria.json`. This is the *mechanical* half of the success
+criteria: every criterion that can be reduced to a measured number or boolean compared
+against a fixed threshold goes here, with a **stable id**. The orchestrator compares these
+ids against the values the implementation reports, with **no LLM judgement** — so they must
+be unambiguous. Qualitative criteria that cannot be reduced this way stay in the PLAN.md
+prose above (the benchmarker judges those narratively); do not force them into JSON.
+
+Format:
+
+```json
+{
+  "criteria": [
+    {
+      "id": "loss_drop_pct",
+      "metric": "training loss reduction over the smoke run, as a percentage",
+      "comparison": ">=",
+      "threshold": 50,
+      "required": true
+    },
+    {
+      "id": "beats_baseline",
+      "metric": "method beats the trivial baseline on the smoke task",
+      "comparison": "==",
+      "threshold": true,
+      "required": true
+    }
+  ]
+}
+```
+
+- `id`: a short stable snake_case key. The Coder's entry point will report a value under
+  this exact key, so choose it carefully — it is the contract.
+- `comparison`: one of `>=`, `<=`, `>`, `<`, `==`, `!=`. Prefer a threshold comparison
+  (`>=`/`<=`) over exact `==` for floating-point metrics.
+- `threshold`: a number, or `true`/`false` for boolean criteria.
+- `required`: `true` if failing it must fail the build; `false` for informational metrics
+  that are reported but never block.
+
+Every id here must correspond to a measurable value the implementation can compute cheaply
+in the smoke run, and should match a criterion described in the PLAN.md prose.
+
+Keep `PLAN.md` tight and skimmable. When you have written both files, stop.

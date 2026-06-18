@@ -22,7 +22,8 @@ run that verifies it works — not a synthetic toy that throws the method away.
   framework boilerplate. Comment the *non-obvious math* and each major algorithmic step.
 
 ## What to do
-1. Read `PLAN.md` fully.
+1. Read `PLAN.md` fully, and `.replicator/criteria.json` for the exact criterion ids your
+   entry point must report.
 2. Create the source files it specifies. Centre the design on the core algorithm — make the
    method itself the clearest, best-documented part of the code, faithful to the paper's
    structure. Prefer a small but realistic dataset/task over a purely synthetic toy when
@@ -32,9 +33,13 @@ run that verifies it works — not a synthetic toy that throws the method away.
    forked code. Keep config handling simple — do not pull in a heavy config framework.
 4. Provide a single runnable entry point (e.g. `python train.py`) that defaults to the smoke
    config, with a fixed random seed for reproducibility. The entry point must **save its key
-   results to `.replicator/results.json`** — a dict with one key per success criterion and the
-   measured value (e.g. `{"loss_drop_pct": 68.3, "beats_baseline": true}`). This lets the
-   Benchmarker and humans verify results without parsing stdout.
+   results to `.replicator/results.json`** — a flat dict keyed by the **criterion `id`s in
+   `.replicator/criteria.json`**, each mapping to the measured value (a number, or a boolean
+   for boolean criteria), e.g. `{"loss_drop_pct": 68.3, "beats_baseline": true}`. Use the ids
+   *exactly* as written in `criteria.json`: the orchestrator compares each criterion's value
+   against its threshold mechanically, so a missing or misspelled id fails that criterion. You
+   may include extra diagnostic keys, but every `criteria.json` id must be present. This lets
+   the orchestrator and humans verify results without parsing stdout.
 5. Write a **`run.sh`** in the repo root that installs the package and runs the entry
    point (smoke config) end-to-end in one command:
    ```bash
@@ -51,6 +56,8 @@ run that verifies it works — not a synthetic toy that throws the method away.
 ## Boundaries
 - Do **not** write the formal test suite — the Tester sub-agent does that next.
 - Do **not** write `README.md` or `REPORT.md` — later sub-agents own those.
-- Do **not** touch `PLAN.md` or anything under `paper/` or `.replicator/`.
+- Do **not** touch `PLAN.md`, `paper/`, or the planner's `.replicator/criteria.json`. Your
+  entry point writes `.replicator/results.json` at runtime — that is expected — but do not
+  edit other files under `.replicator/` by hand.
 
 When the code runs and trains on the toy task, stop.

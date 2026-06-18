@@ -13,20 +13,28 @@ the paper, and what remains to reach paper-scale results — and emit a structur
 verdict.
 
 ## What to do
-1. Read the **Smoke-run success criteria** section of `PLAN.md`.
+1. Read the **Smoke-run success criteria** section of `PLAN.md` and `.replicator/criteria.json`
+   (the mechanizable criteria, with ids and thresholds).
 2. Run the implementation's entry point on the smoke config (e.g. `python train.py`) using
    Bash, on CPU or modest hardware. Keep runs short and cheap; downscale further if anything
-   is slow. Capture the metrics each criterion needs (losses, accuracies, baseline
-   comparisons, invariants, etc.).
-3. For each criterion, determine objectively whether it **passed** or **failed**, with the
-   numbers that justify the verdict. If a criterion cannot be checked cheaply, say so.
+   is slow. The entry point writes `.replicator/results.json` keyed by the `criteria.json`
+   ids — **you must actually run it** so that file reflects this run, not a stale one. Capture
+   any extra metrics the qualitative criteria need (losses, accuracies, invariants, etc.).
+3. **Division of labour.** The numeric/boolean criteria in `criteria.json` are compared
+   against `results.json` *mechanically by the orchestrator* — that is not your call to make,
+   and you must never tune anything to force one to pass. Your verdict's job is the
+   **qualitative** PLAN.md criteria that are not in `criteria.json`: judge each objectively as
+   passed or failed, with the numbers that justify it. If a qualitative criterion cannot be
+   checked cheaply, say so. (You may still flag a mechanizable criterion you can see is clearly
+   failing, but the orchestrator is the authority on those.)
 
 ## Output: write `REPORT.md` in the repo root, with these sections
 - **Summary**: one line — does the smoke run behave as the method predicts, qualitatively?
   (yes / partially / no)
 - **Verified behavior**: a Markdown table of the smoke-run success criteria with columns `#`,
-  `Criterion`, `Status`, `Measured`, `Threshold`. Use ✅ / ❌ for status. Include the exact
-  command used below the table.
+  `Criterion`, `Status`, `Measured`, `Threshold`. Use ✅ / ❌ for status. For criteria in
+  `criteria.json`, take `Measured` from `results.json` and `Threshold` from `criteria.json` so
+  the table matches the mechanical check. Include the exact command used below the table.
 - **Reference implementation fidelity**: which components/equations are implemented faithfully
   to the paper (per `PLAN.md`), and which are simplified or omitted — so a reader knows how
   much of the real method this code captures.

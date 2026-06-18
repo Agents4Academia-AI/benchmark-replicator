@@ -55,12 +55,16 @@ def read_verdict(repo: Path, expected_phase: str) -> Verdict:
         return Verdict(
             phase=expected_phase,
             status="fail",
-            failures=[Failure(criterion="malformed verdict", detail=detail, evidence=VERDICT_PATH)],
+            failures=[
+                Failure(
+                    criterion="malformed verdict", detail=detail, evidence=VERDICT_PATH
+                )
+            ],
         )
 
     try:
         data = json.loads(path.read_text())
-    except (FileNotFoundError, OSError):
+    except FileNotFoundError, OSError:
         return malformed(f"{expected_phase} wrote no verdict at {VERDICT_PATH}.")
     except json.JSONDecodeError as exc:
         return malformed(f"{expected_phase}'s verdict is not valid JSON: {exc}.")
@@ -79,7 +83,9 @@ def read_verdict(repo: Path, expected_phase: str) -> Verdict:
     ]
     phase = str(data.get("phase", "")).strip().lower()
     if phase != expected_phase:
-        return malformed(f"verdict phase {phase!r} does not match the {expected_phase} judge.")
+        return malformed(
+            f"verdict phase {phase!r} does not match the {expected_phase} judge."
+        )
     status = str(data.get("status", "")).strip().lower()
     if status not in ("pass", "fail"):
         return malformed(f"verdict status {status!r} is not 'pass' or 'fail'.")
@@ -95,12 +101,34 @@ def clear_verdict(repo: Path) -> None:
     (repo / VERDICT_PATH).unlink(missing_ok=True)
 
 
+def write_verdict(repo: Path, verdict: Verdict) -> None:
+    """Persist a structured verdict in the format expected from judging phases."""
+    path = repo / VERDICT_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = {
+        "phase": verdict.phase,
+        "status": verdict.status,
+        "failures": [
+            {
+                "criterion": f.criterion,
+                "severity": f.severity,
+                "detail": f.detail,
+                "evidence": f.evidence,
+            }
+            for f in verdict.failures
+        ],
+    }
+    path.write_text(json.dumps(data, indent=2) + "\n")
+
+
 def format_failures(verdicts: list[Verdict]) -> str:
     """Render the failures across one or more verdicts as a markdown brief for Repair."""
     lines: list[str] = []
     for verdict in verdicts:
         for f in verdict.failures:
-            lines.append(f"- **[{f.severity.upper()}] ({verdict.phase}) {f.criterion}** — {f.detail}")
+            lines.append(
+                f"- **[{f.severity.upper()}] ({verdict.phase}) {f.criterion}** — {f.detail}"
+            )
             if f.evidence:
                 lines.append(f"  - evidence: {f.evidence}")
     return "\n".join(lines) if lines else "- (no specific failures were recorded)"

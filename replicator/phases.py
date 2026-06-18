@@ -32,7 +32,7 @@ class Phase:
     """Tools auto-approved for this sub-agent. Everything else is unavailable."""
 
     permission_mode: str = "acceptEdits"
-    """SDK permission mode. The planner only writes PLAN.md; others edit freely."""
+    """SDK permission mode. The planner writes PLAN.md and criteria.json; others edit freely."""
 
     max_turns: int = 80
     """Hard cap on agentic turns, to bound cost."""
@@ -51,9 +51,9 @@ class Phase:
 PLANNER = Phase(
     name="planner",
     task=(
-        "Read the paper ({sources}) and write `PLAN.md` for a minimal, CPU-only "
-        "smoke-test implementation of its main method, following your instructions."
-        "{instructions}"
+        "Read the paper ({sources}) and write `PLAN.md` plus `.replicator/criteria.json` for "
+        "a minimal, CPU-only smoke-test implementation of its main method, following your "
+        "instructions.{instructions}"
     ),
     # Planner reads the paper, may search the web for context, writes only PLAN.md.
     allowed_tools=[*_READ_TOOLS, "Write", "WebFetch", "WebSearch"],
