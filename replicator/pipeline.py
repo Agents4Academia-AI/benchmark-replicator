@@ -17,6 +17,7 @@ from pathlib import Path
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
+    ClaudeSDKClient,
     ResultMessage,
     TextBlock,
     ToolUseBlock,
@@ -24,7 +25,7 @@ from claude_agent_sdk import (
 )
 
 from .criteria import mechanical_failures
-from .phases import BENCHMARKER, CLEANER, CODER, PLANNER, REPAIR, TESTER, Phase
+from .phases import BENCHMARKER, CLEANER, CODER, PLANNER, REPAIR, REVISER, TESTER, Phase
 from .verdict import (
     VERDICT_PATH,
     Verdict,
@@ -38,6 +39,7 @@ from .verdict import (
 # Overridden wholesale by an explicit --model on the CLI.
 _DEFAULT_MODELS = {
     "planner": "opus",
+    "reviser": "opus",  # Conversationally revising the plan is the same hard reasoning.
     "coder": "opus",
     "tester": "sonnet",
     "benchmarker": "sonnet",
@@ -100,23 +102,89 @@ async def _run_phase(
 
     try:
         async for message in query(prompt=task, options=options):
-            if isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if isinstance(block, TextBlock) and block.text.strip():
-                        print(f"  [{_now()}] {_short(block.text)}")
-                        log.write(f"\n[assistant] {block.text}\n")
-                    elif isinstance(block, ToolUseBlock):
-                        target = _tool_target(block.input)
-                        print(f"  [{_now()}] · {block.name}{target}")
-                        log.write(f"[tool] {block.name} {block.input}\n")
-            elif isinstance(message, ResultMessage):
-                print(f"  [{_now()}] ✔ {label} finished ({message.subtype})")
-                log.write(f"\n[result] {message.subtype}\n")
-                if message.total_cost_usd is not None:
-                    usage.cost_usd = message.total_cost_usd
-                if message.usage:
-                    usage.input_tokens = message.usage.get("input_tokens", 0)
-                    usage.output_tokens = message.usage.get("output_tokens", 0)
+            _render(message, label, log, usage)
+    finally:
+        log.close()
+
+    return usage
+
+
+def _render(message, label: str, log, usage: _PhaseUsage) -> None:
+    """Print and log one streamed SDK message, keeping latest cost/token totals.
+
+    Shared by the one-shot phases (``_run_phase``) and the interactive revision chat
+    (``_run_chat_phase``). The SDK reports session totals in ``ResultMessage``; keep
+    the latest totals instead of adding them across chat turns.
+    """
+    if isinstance(message, AssistantMessage):
+        for block in message.content:
+            if isinstance(block, TextBlock) and block.text.strip():
+                print(f"  [{_now()}] {_short(block.text)}")
+                log.write(f"\n[assistant] {block.text}\n")
+            elif isinstance(block, ToolUseBlock):
+                target = _tool_target(block.input)
+                print(f"  [{_now()}] · {block.name}{target}")
+                log.write(f"[tool] {block.name} {block.input}\n")
+    elif isinstance(message, ResultMessage):
+        print(f"  [{_now()}] ✔ {label} finished ({message.subtype})")
+        log.write(f"\n[result] {message.subtype}\n")
+        if message.total_cost_usd is not None:
+            usage.cost_usd = message.total_cost_usd
+        if message.usage:
+            usage.input_tokens = message.usage.get("input_tokens", 0)
+            usage.output_tokens = message.usage.get("output_tokens", 0)
+
+
+async def _run_chat_phase(phase: Phase, repo: Path, model: str) -> _PhaseUsage:
+    """Drive a multi-turn revision conversation over PLAN.md.
+
+    Unlike ``_run_phase`` (a one-shot ``query``), this keeps a stateful ``ClaudeSDKClient``
+    session open so the agent remembers the conversation: the user types successive revision
+    requests and the agent edits ``PLAN.md`` / ``.replicator/criteria.json`` in place. The
+    whole session lives inside this one coroutine (the SDK forbids using a client across
+    async contexts). Returns the session usage totals for the cost summary.
+    """
+    label = phase.name
+    log_path = repo / _LOG_DIR_NAME / f"{label}.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log = log_path.open("w")
+    usage = _PhaseUsage(label=label)
+
+    print(f"\n{'=' * 70}\n▶  {label.upper()}  (model: {model})\n{'=' * 70}")
+    print(
+        "  Chat to revise PLAN.md and criteria.json. Type a request and press Enter;\n"
+        "  the agent edits the plan and reports back. Type 'done' (or an empty line)\n"
+        "  when you're finished to return to the approve prompt."
+    )
+    options = ClaudeAgentOptions(
+        system_prompt=phase.system_prompt(),
+        cwd=str(repo),
+        allowed_tools=phase.allowed_tools,
+        permission_mode=phase.permission_mode,
+        max_turns=phase.max_turns,
+        model=model,
+    )
+    # First message tells the agent where the paper lives, like the planner is told.
+    first_prefix = (
+        f"You are revising the existing PLAN.md and .replicator/criteria.json. For reference, "
+        f"{_paper_sources(repo)}.\n\nMy first request:\n"
+    )
+
+    try:
+        async with ClaudeSDKClient(options=options) as client:
+            first = True
+            while True:
+                try:
+                    message = input("\nyou › ").strip()
+                except EOFError:
+                    break
+                if message.lower() in ("", "done", "exit", "quit"):
+                    break
+                log.write(f"\n[user] {message}\n")
+                await client.query(first_prefix + message if first else message)
+                first = False
+                async for reply in client.receive_response():
+                    _render(reply, label, log, usage)
     finally:
         log.close()
 
@@ -160,11 +228,15 @@ def _paper_sources(repo: Path) -> str:
     return f"the PDF is at `{pdf}`{link}"
 
 
-def _checkpoint(repo: Path) -> bool:
+async def _checkpoint(
+    repo: Path, model_override: str | None, usages: list[_PhaseUsage]
+) -> bool:
     """Show PLAN.md and ask the user to approve. Returns True to continue.
 
-    Answering ``edit`` lets the user modify PLAN.md (in their own editor) and
-    then re-presents the prompt, so plans can be tweaked before any code lands.
+    Answering ``chat`` opens a multi-turn conversation with the reviser agent, which
+    edits PLAN.md (and criteria.json) per the user's requests; the updated plan is then
+    re-presented, so plans can be revised before any code lands. The chat's usage is
+    appended to ``usages`` so its cost shows up in the final summary.
     """
     plan = repo / "PLAN.md"
     while True:
@@ -172,13 +244,15 @@ def _checkpoint(repo: Path) -> bool:
         print(plan.read_text() if plan.exists() else "  (PLAN.md was not created!)")
         print("─" * 70)
         answer = input(
-            "Approve plan and continue? [y]es / [N]o / [e]dit PLAN.md then re-ask: "
+            "Approve plan and continue? [y]es / [N]o / [c]hat to revise PLAN.md: "
         )
         choice = answer.strip().lower()
         if choice in ("y", "yes"):
             return True
-        if choice in ("e", "edit"):
-            input(f"Edit {plan} now, save it, then press Enter to re-review… ")
+        if choice in ("c", "chat"):
+            usages.append(
+                await _run_chat_phase(REVISER, repo, _model(REVISER, model_override))
+            )
             continue
         return False
 
@@ -309,7 +383,7 @@ async def run_pipeline(
             instructions=instructions_block,
         )
     )
-    if not _checkpoint(repo):
+    if not await _checkpoint(repo, model_override, all_usages):
         print("\n✋ Stopped at planning checkpoint. The plan is in PLAN.md.")
         _print_cost_summary(all_usages)
         sys.exit(0)

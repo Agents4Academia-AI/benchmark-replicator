@@ -60,6 +60,17 @@ PLANNER = Phase(
     max_turns=40,
 )
 
+REVISER = Phase(
+    name="reviser",
+    # Empty: the checkpoint chat loop drives this phase turn-by-turn with the user's
+    # live messages, not a templated task string formatted once up front.
+    task="",
+    # Like the planner (paper + web) plus Edit, for surgical changes to the existing
+    # PLAN.md and criteria.json.
+    allowed_tools=[*_READ_TOOLS, "Write", "Edit", "WebFetch", "WebSearch"],
+    max_turns=40,
+)
+
 CODER = Phase(
     name="coder",
     task=(
