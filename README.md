@@ -1,33 +1,11 @@
 # Benchmark Replicator
 
-> Give it an arXiv paper or any PDF, get back a **clean, minimal, modular repo** that is a
-> **reference-level implementation** of the paper's main method -- faithful enough to read,
-> trust, and extend, and shipped with a **cheap smoke run** that verifies it works.
+Ever opened a paper's codebase to use, extend, or compare against, and given up
+because of how rough, undocumented, or bitrotted it is?
 
-**Team:** Arya · Olga · Sahel
-
-**Day-5 demo targets (Fri 19 Jun):**
-1. Eval dataset and pipeline
-2. Agent in action
-
-It's built for ML researchers (ICML/NeurIPS/ICLR) who need to compare against methods whose
-code is missing, sloppy, or unrunnable.
-
-## What it does (and doesn't)
-
-- ✅ Implements the paper's **one core method/algorithm** as a faithful, modular reference in
-  clean Python (`torch`/`numpy`, plus other common ML deps when justified).
-- ✅ Preserves the **real method structure** and exposes realistic config paths — a cheap
-  **smoke** config (run by default) and a **reference/scale-up** config closer to the paper.
-- ✅ Verifies the method **runs, learns, and respects its invariants** via a cheap smoke run,
-  and documents how to scale toward paper-like experiments.
-- ✅ Produces tests, an honest benchmark `REPORT.md`, and a `README.md` in the generated repo.
-- ❌ Does **not** promise full paper reproduction, exact table numbers, or paper-scale
-  training by default.
-
-The default smoke run is intentionally cheap — minutes, on CPU or modest hardware where
-feasible. Paper-scale configs may require a GPU; they ship as documented config, not as
-something the pipeline runs.
+Point this agent at a link to the paper PDF and it builds a clean, minimal,
+modular implementation of the method --- code you can actually read, run, and
+build on, plus the experiments to reproduce the paper's key results.
 
 ## Installation
 
@@ -92,6 +70,22 @@ toward paper-like experiments. Per-phase transcripts are saved under `<repo>/.re
 > Run modes today are config files inside the generated repo (smoke vs. reference/scale-up).
 > A future CLI `--mode` could distinguish smoke / reference / harness runs directly; it is not
 > implemented yet.
+
+## What it does (and doesn't)
+
+- ✅ Implements the paper's **one core method/algorithm** as a faithful, modular reference in
+  clean Python (`torch`/`numpy`, plus other common ML deps when justified).
+- ✅ Preserves the **real method structure** and exposes realistic config paths — a cheap
+  **smoke** config (run by default) and a **reference/scale-up** config closer to the paper.
+- ✅ Verifies the method **runs, learns, and respects its invariants** via a cheap smoke run,
+  and documents how to scale toward paper-like experiments.
+- ✅ Produces tests, an honest benchmark `REPORT.md`, and a `README.md` in the generated repo.
+- ❌ Does **not** promise full paper reproduction, exact table numbers, or paper-scale
+  training by default.
+
+The default smoke run is intentionally cheap — minutes, on CPU or modest hardware where
+feasible. Paper-scale configs may require a GPU; they ship as documented config, not as
+something the pipeline runs.
 
 ## How it works
 
