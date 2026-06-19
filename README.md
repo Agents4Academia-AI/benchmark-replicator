@@ -4,7 +4,7 @@ Ever opened a paper's codebase to use, extend, or compare against, and given up
 because of how rough, undocumented, or bitrotted it is?
 
 Point this agent at a link to the paper PDF and it builds a clean, minimal,
-modular implementation of the method --- code you can actually read, run, and
+modular implementation of the method &mdash; code you can actually read, run, and
 build on, plus the experiments to reproduce the paper's key results.
 
 ## Installation
