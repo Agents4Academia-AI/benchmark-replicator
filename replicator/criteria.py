@@ -70,7 +70,7 @@ def read_criteria(repo: Path) -> list[Criterion] | None:
     """
     try:
         data = json.loads((repo / CRITERIA_PATH).read_text())
-    except FileNotFoundError, OSError, json.JSONDecodeError:
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
         return None
     if not isinstance(data, dict) or not isinstance(data.get("criteria"), list):
         return None
@@ -102,7 +102,7 @@ def read_results(repo: Path) -> dict | None:
     """Load ``results.json`` (the values the entry point measured); ``None`` if unreadable."""
     try:
         data = json.loads((repo / RESULTS_PATH).read_text())
-    except FileNotFoundError, OSError, json.JSONDecodeError:
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
         return None
     return data if isinstance(data, dict) else None
 

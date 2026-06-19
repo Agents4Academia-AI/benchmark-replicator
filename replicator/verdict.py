@@ -64,7 +64,7 @@ def read_verdict(repo: Path, expected_phase: str) -> Verdict:
 
     try:
         data = json.loads(path.read_text())
-    except FileNotFoundError, OSError:
+    except (FileNotFoundError, OSError):
         return malformed(f"{expected_phase} wrote no verdict at {VERDICT_PATH}.")
     except json.JSONDecodeError as exc:
         return malformed(f"{expected_phase}'s verdict is not valid JSON: {exc}.")
