@@ -62,7 +62,7 @@ uv run replicate https://arxiv.org/abs/1706.03762 --instructions "focus only on 
 uv run replicate https://arxiv.org/abs/1706.03762 --instructions ./my_notes.md
 ```
 
-The generated baseline lands in the output directory — a standalone repo with its own
+The generated baseline lands in the output directory &mdash; a standalone repo with its own
 `README.md`, `PLAN.md`, `REPORT.md`, source, and tests. The pipeline runs the cheap **smoke**
 config; the generated repo also ships a **reference/scale-up** config for researchers to push
 toward paper-like experiments. Per-phase transcripts are saved under `<repo>/.replicator/logs/`.
@@ -89,25 +89,15 @@ something the pipeline runs.
 
 ## How it works
 
-A deterministic Python orchestrator (`replicator/pipeline.py`) runs five scoped sub-agents,
-each its own [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-python)
-`query()` with a restricted tool set. They share state through files in the generated repo:
+A deterministic Python orchestrator (`replicator/pipeline.py`) runs a fixed
+sequence of scoped [Claude Agent
+SDK](https://github.com/anthropics/claude-agent-sdk-python) sub-agents &mdash;
+planner, coder, tester, benchmarker, repair, and cleaner &mdash; that share
+state through files in the generated repo. After planning, the pipeline **pauses
+for your approval** of `PLAN.md` before any code is written.
 
-```
-paper (arXiv URL/id, PDF URL, or local PDF) → fetch PDF → [planner] → ⏸ you approve PLAN.md ⏸
-                                 → [coder] → [tester] → [benchmarker] → [cleaner]
-```
-
-| Sub-agent     | Scope                                                              | Writes        |
-|---------------|-------------------------------------------------------------------|---------------|
-| planner       | read paper, pick the main method, plan a reference impl + run modes| `PLAN.md`     |
-| coder         | implement the real method structure cleanly and modularly         | source        |
-| tester        | small, fast, deterministic pytest suite (shapes, smoke, invariants)| `tests/`      |
-| benchmarker   | run the smoke config, check criteria, report fidelity + gap        | `REPORT.md`   |
-| cleaner       | simplify, lint/format, write the repo's README                    | `README.md`   |
-
-After planning, the pipeline **pauses for your approval** of `PLAN.md` before any code is
-written.
+See **[docs/how_it_works.md](docs/how_it_works.md)** for the full pipeline, the
+verify-and-repair loop, and an annotated diagram.
 
 ## Layout
 
