@@ -63,29 +63,28 @@ uv run replicate https://arxiv.org/abs/1706.03762 --instructions ./my_notes.md
 ```
 
 The generated baseline lands in the output directory &mdash; a standalone repo with its own
-`README.md`, `PLAN.md`, `REPORT.md`, source, and tests. The pipeline runs the cheap **smoke**
-config; the generated repo also ships a **reference/scale-up** config for researchers to push
-toward paper-like experiments. Per-phase transcripts are saved under `<repo>/.replicator/logs/`.
+`README.md`, `PLAN.md`, `REPORT.md`, source, and tests. The pipeline runs the **default**
+config (the real experiment within budget, roughly tens of minutes to about an hour on a modern
+CPU); the repo also ships a **fast test** config (seconds, used by pytest) and an optional
+**scale-up** config for paper-scale runs. Per-phase transcripts are saved under
+`<repo>/.replicator/logs/`.
 
-> Run modes today are config files inside the generated repo (smoke vs. reference/scale-up).
-> A future CLI `--mode` could distinguish smoke / reference / harness runs directly; it is not
-> implemented yet.
+> Run modes today are config files inside the generated repo (fast test / default / scale-up).
+> A future CLI `--mode` could select them directly; it is not implemented yet.
 
 ## What it does (and doesn't)
 
 - ✅ Implements the paper's **one core method/algorithm** as a faithful, modular reference in
   clean Python (`torch`/`numpy`, plus other common ML deps when justified).
-- ✅ Preserves the **real method structure** and exposes realistic config paths — a cheap
-  **smoke** config (run by default) and a **reference/scale-up** config closer to the paper.
-- ✅ Verifies the method **runs, learns, and respects its invariants** via a cheap smoke run,
-  and documents how to scale toward paper-like experiments.
+- ✅ Runs **the most informative experiment from the paper that completes on a modern CPU
+  within roughly tens of minutes to about an hour** &mdash; reproducing the paper's actual
+  qualitative finding at that scale, not just a smoke toy.
+- ✅ Ships three config tiers: a **fast test** config (seconds, for pytest), the **default**
+  config (the real experiment, run by the pipeline), and an optional **scale-up** config
+  (documentation only, for paper-scale runs that may need a GPU).
 - ✅ Produces tests, an honest benchmark `REPORT.md`, and a `README.md` in the generated repo.
-- ❌ Does **not** promise full paper reproduction, exact table numbers, or paper-scale
+- ❌ Does **not** promise full paper-scale reproduction, exact table numbers, or GPU-scale
   training by default.
-
-The default smoke run is intentionally cheap — minutes, on CPU or modest hardware where
-feasible. Paper-scale configs may require a GPU; they ship as documented config, not as
-something the pipeline runs.
 
 ## How it works
 

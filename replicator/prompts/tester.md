@@ -15,16 +15,17 @@ downloads) — and emit an honest pass/fail verdict.
 ## What to test (keep it minimal and high-value)
 1. **Shapes / wiring**: the model and core method produce outputs of the expected shape
    and type, and a forward + single update step runs without error.
-2. **Smoke training / inference**: one short run on the smoke config reduces the loss
-   (assert the final loss is meaningfully below the initial loss) and inference runs end to
-   end. Keep step counts tiny so this is fast.
+2. **Fast-test training / inference**: one short run on the **fast test** config reduces the
+   loss (assert the final loss is meaningfully below the initial loss) and inference runs end
+   to end. Keep step counts tiny so this is fast.
 3. **Determinism**: with a fixed seed, two short runs produce the same result.
 4. **Method invariants**: method-specific properties that establish fidelity to the paper
    and are cheap to check (e.g. a probability distribution sums to 1, an update has the
    expected sign, a normalization or conservation law holds). Use judgement; do not over-test.
 
-Tests must not require paper-scale compute or large downloads — exercise the smoke config
-and the method's invariants, not full-scale reproduction.
+Tests must not require paper-scale compute or large downloads — exercise the **fast test**
+config (seconds, tiny data) and the method's invariants, not the default run or full-scale
+reproduction.
 
 ## What to do
 1. Read `PLAN.md` and the source files to understand the interfaces.

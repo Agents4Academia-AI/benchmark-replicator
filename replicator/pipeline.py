@@ -264,7 +264,7 @@ def _model(phase: Phase, override: str | None) -> str:
 def _apply_mechanical_check(repo: Path, verdict: Verdict) -> Verdict:
     """Fold the deterministic criteria/results comparison into the benchmarker verdict.
 
-    The numeric and boolean smoke criteria are judged in Python, not by the LLM: any
+    The numeric and boolean criteria are judged in Python, not by the LLM: any
     required criterion that fails (or whose value is missing from ``results.json``) is
     added to the verdict's failures, forcing a FAIL that triggers Repair regardless of
     what the benchmarker concluded. When no valid ``criteria.json`` exists the check is

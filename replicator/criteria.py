@@ -1,7 +1,7 @@
 """Machine-readable success criteria shared across the planner, coder, and benchmarker.
 
-The Planner writes ``.replicator/criteria.json`` declaring each *mechanizable* smoke-run
-criterion as a stable ``id`` plus a metric description, a comparison operator, a
+The Planner writes ``.replicator/criteria.json`` declaring each *mechanizable* criterion
+for the default run as a stable ``id`` plus a metric description, a comparison operator, a
 threshold, and whether it is ``required``. The Coder's entry point writes the measured
 values to ``.replicator/results.json`` keyed by those same ids. The orchestrator then
 compares the two **mechanically** — no LLM judgement — so a numeric or boolean criterion
@@ -41,7 +41,7 @@ def _is_numeric(value: object) -> bool:
 
 @dataclass(frozen=True)
 class Criterion:
-    """One mechanizable smoke-run criterion, as declared by the Planner."""
+    """One mechanizable criterion for the default run, as declared by the Planner."""
 
     id: str
     metric: str
@@ -167,7 +167,7 @@ def evaluate(criteria: list[Criterion], results: dict) -> list[CriterionResult]:
 
 
 def mechanical_failures(repo: Path) -> tuple[list[Failure], list[str]]:
-    """Mechanically check the smoke results against the declared criteria.
+    """Mechanically check the default-run results against the declared criteria.
 
     Returns ``(failures, notes)``. ``failures`` are required-criterion failures to fold
     into the Benchmarker verdict — each triggers Repair. ``notes`` are human-readable
@@ -186,7 +186,7 @@ def mechanical_failures(repo: Path) -> tuple[list[Failure], list[str]]:
             [
                 Failure(
                     criterion="results.json missing",
-                    detail=f"the entry point wrote no readable {RESULTS_PATH}, so no smoke-run "
+                    detail=f"the entry point wrote no readable {RESULTS_PATH}, so no "
                     f"criterion can be checked mechanically.",
                     severity="major",
                     evidence=RESULTS_PATH,

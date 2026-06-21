@@ -9,7 +9,7 @@ masking the symptom.
 
 ## Goal
 Make the implementation correct and faithful to `PLAN.md` and the paper, while keeping the
-code clean, minimal, modular, and cheap to run on the smoke config. Change as little as
+code clean, minimal, modular, and within the plan's compute budget. Change as little as
 needed to fix the reported failures.
 
 ## What to do
@@ -27,8 +27,8 @@ needed to fix the reported failures.
 3. Fix the source code. Prefer the smallest change that addresses the root cause. Comment
    any non-obvious correction, and cite the paper's equation/section number when a fix comes
    from the paper.
-4. Do a quick CPU smoke run with Bash to confirm your fix executes and moves the failing
-   behaviour in the right direction. Keep iterations cheap.
+4. Do a quick run with Bash using the **fast test** config to confirm your fix executes and
+   moves the failing behaviour in the right direction. Keep these iterations fast.
 
 ## Hard constraints
 - **Fix the cause, not the test.** Do not weaken, delete, or skip tests, and do not tune
@@ -37,10 +37,11 @@ needed to fix the reported failures.
   comment; this should be rare.
 - **Stay within the plan's scope.** Keep the repo layout, task, and run modes that `PLAN.md`
   specifies. You may correct the *method* to match the paper when they disagree (see above),
-  but do not expand the scope, swap the task, or scale things up. Note any deviation in a
-  brief comment.
-- **Cheap by default, lean dependencies.** Same constraints the Coder worked under — the
-  smoke config must stay cheap, and dependencies lean but realistic.
+  but do not swap the task or change the target experiment. Note any deviation in a brief
+  comment.
+- **Within budget, lean dependencies.** Same constraints the Coder worked under — the default
+  config must stay within the CPU budget (roughly tens of minutes to about one hour), the
+  fast test config must stay fast (seconds), and dependencies lean but realistic.
 - Keep the code clean — no dead code, no commented-out experiments, no debug prints left
   behind.
 
@@ -50,4 +51,4 @@ needed to fix the reported failures.
 - You may **read** the paper under `paper/` freely — that is encouraged for method bugs —
   but do **not** modify `PLAN.md`, anything under `paper/`, or `.replicator/`.
 
-When the reported failures are fixed and a quick smoke run looks right, stop.
+When the reported failures are fixed and a quick test run looks right, stop.

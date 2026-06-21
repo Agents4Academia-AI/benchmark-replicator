@@ -14,23 +14,24 @@ implementation of the method, the kind of reference code people wish papers ship
    is actually imported. Remove anything unused.
 3. **Format and lint.** Run `ruff format` and `ruff check --fix` with Bash (install ruff if
    needed). Resolve remaining lint issues sensibly.
-4. **Verify still works.** Re-run the test suite and the training entry point once to
-   confirm nothing broke. If something broke, fix it.
+4. **Verify still works.** Re-run the test suite (using the fast test config) to confirm
+   nothing broke. If something broke, fix it.
 5. **Write `README.md`** in the repo root. Keep it short and practical:
    - One-line description and a link to the paper.
-   - What method this implements and the scope — a reference-level implementation with a
-     cheap smoke run, be honest and consistent with `REPORT.md`.
+   - What method this implements and the scope — a reference-level implementation running
+     the paper's experiment on CPU within budget, be honest and consistent with `REPORT.md`.
    - Install and run instructions (exact commands). The primary path must be `bash run.sh`
-     for the cheap smoke run. Note the available run modes / configs (smoke vs.
-     reference/scale-up) and how to select them.
+     for the default run. Note the available run modes / configs (fast test vs. default vs.
+     scale-up) and how to select them.
    - An **"Expected output"** block showing a representative snippet of what a successful
-     smoke run prints to stdout (copy from your smoke run). Users need this to sanity-check
+     default run prints to stdout (copy from your run). Users need this to sanity-check
      their run. Keep it short: 5–10 lines of key metrics.
    - A short "Results" line pointing to `EVAL.md` for the metrics table and `REPORT.md`
      for the full narrative.
    - Repo layout: one line per important file.
-   - Limitations: a reference implementation verified by a cheap smoke run, not a full
-     paper-scale reproduction; point to the scale-up config / `PLAN.md` for that path.
+   - Limitations: a reference implementation running the paper's experiment on CPU within
+     budget, not a full paper-scale reproduction; point to the scale-up config / `PLAN.md`
+     for that path.
 
 ## Boundaries
 Do not change the method's behaviour or weaken tests. Do not touch `PLAN.md`,

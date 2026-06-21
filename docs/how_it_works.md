@@ -20,7 +20,7 @@ repo (`PLAN.md`, the source code, `criteria.json`, `results.json`, `REPORT.md`).
                                           ▼
                             ╔═══════════════════════════════╗
             paper.pdf ─────▶║     ① PLANNER     (opus)      ║─────▶ PLAN.md
-            paper.html ────▶║  reads paper, designs toy task║       + criteria.json
+            paper.html ────▶║  picks CPU-feasible experiment║       + criteria.json
                             ╚═══════════════════════════════╝
                                           │
                                           ▼
@@ -130,9 +130,10 @@ SDK's `ResultMessage` and reported in a cost summary table at the end.
 ### ① Planner (opus)
 Reads the paper (HTML preferred, PDF authoritative) and writes two files:
 
-- **`PLAN.md`** &mdash; a toy, CPU-only smoke-test design of the paper's main method: one method,
-  a tiny synthetic dataset, and success criteria measurable in minutes. Qualitative criteria
-  stay here as prose.
+- **`PLAN.md`** &mdash; a plan for the paper's most informative CPU-feasible experiment (roughly
+  tens of minutes to about an hour on a modern CPU): one method, the real dataset or task from
+  the paper (or a smaller version if needed), and success criteria targeting the paper's
+  qualitative result at that scale. Qualitative criteria stay here as prose.
 - **`.replicator/criteria.json`** &mdash; the *mechanizable* subset of success criteria, each as a
   stable `id`, a `metric` description, a `comparison` operator (`>= <= > < == !=`), a numeric
   or boolean `threshold`, and a `required` flag.
