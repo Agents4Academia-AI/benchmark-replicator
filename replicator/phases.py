@@ -12,6 +12,51 @@ from pathlib import Path
 
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
 
+# Hardware profile injected into every phase's system prompt via the {{HARDWARE}} sentinel.
+# CPU_PROFILE reproduces today's CPU-only behaviour byte-for-byte.
+# GPU_PROFILE enables the two-config GPU model (full paper-scale default + reduced
+# verification run for the pipeline itself).
+CPU_PROFILE = (
+    "**Faithful by default, within a CPU budget.** The default run should reproduce the"
+    " paper's most informative experiment that completes on a modern multi-core CPU within"
+    " **roughly tens of minutes to about one hour**. If the real experiment is too costly,"
+    " reproduce a smaller-but-real version (fewer steps, smaller data, same algorithm). Only"
+    " fall back to a synthetic toy when the paper's experiments genuinely require a GPU or"
+    " large data downloads with no CPU-feasible version. No large downloads in the default"
+    " path. The default run is what the entry point executes, what writes"
+    " `.replicator/results.json`, and what the benchmarker runs. Calibrate"
+    " `.replicator/criteria.json` to this within-budget run, not paper-scale numbers."
+)
+
+GPU_PROFILE = (
+    "**Use the GPU — full and verification configs.** Target hardware is a single CUDA GPU."
+    " The pipeline is running on a GPU node (launched from inside a GPU allocation;"
+    " `python train.py` and the benchmarker run locally on this machine). Ship **two**"
+    " experiment configs alongside the fast test config:\n"
+    "  - **FULL config** (`python train.py`, no extra args): ambitious parameters matching"
+    " the paper's actual experiment (model size, dataset, steps). May take hours on the GPU;"
+    " this is what a user clones and runs to reproduce the paper. Document it prominently.\n"
+    "  - **VERIFICATION config** (e.g. `python train.py --quick`): a clearly documented"
+    " reduced setting that finishes within roughly tens of minutes to about one hour on a"
+    " single GPU, with a hard step or time cap so it cannot run away.\n"
+    "\n"
+    "  Contract: the entry point writes `.replicator/results.json` **only from the"
+    " VERIFICATION run** (not the full config). The benchmarker runs the **VERIFICATION"
+    " command** — never the full config. Calibrate `.replicator/criteria.json` thresholds"
+    " to the VERIFICATION run (sanity-level signals: loss decreases, metric beats trivial"
+    " baseline), not paper headline numbers. Assert `torch.cuda.is_available()` at"
+    " entry-point start; fail loudly with a clear message if no GPU is found. Also emit a"
+    " `run_full.sbatch` Slurm batch script for the FULL config with placeholder fields"
+    " (`--partition`, `--account`, `--time`, `--gpus`) — the user submits this; the"
+    " pipeline never runs it. No large downloads in the default path."
+)
+
+
+def hardware_profile(gpu: bool) -> str:
+    """The hardware profile string to inject into every phase's system prompt."""
+    return GPU_PROFILE if gpu else CPU_PROFILE
+
+
 # Read-only tools every phase may use to orient itself.
 _READ_TOOLS = ["Read", "Glob", "Grep"]
 # Tools that mutate the repo (the coder onward need these).
@@ -37,9 +82,19 @@ class Phase:
     max_turns: int = 80
     """Hard cap on agentic turns, to bound cost."""
 
-    def system_prompt(self) -> str:
-        """Load this phase's system prompt from ``prompts/<name>.md``."""
-        return (_PROMPTS_DIR / f"{self.name}.md").read_text()
+    def system_prompt(self, hardware: str) -> str:
+        """Load this phase's system prompt from ``prompts/<name>.md``.
+
+        Fills the ``{{HARDWARE}}`` sentinel with the chosen hardware profile so
+        each phase reads as one coherent voice — no contradictory CPU prose left
+        in the system prompt when GPU mode is active.
+        """
+        text = (_PROMPTS_DIR / f"{self.name}.md").read_text()
+        if "{{HARDWARE}}" not in text:
+            raise ValueError(
+                f"prompt {self.name}.md is missing the {{{{HARDWARE}}}} sentinel"
+            )
+        return text.replace("{{HARDWARE}}", hardware)
 
 
 # The phases. ``{sources}`` and ``{instructions}`` in the planner task, ``{pdf}`` and
@@ -52,8 +107,8 @@ PLANNER = Phase(
     name="planner",
     task=(
         "Read the paper ({sources}) and write `PLAN.md` plus `.replicator/criteria.json` for "
-        "a faithful, CPU-runnable implementation that reproduces the paper's most informative "
-        "CPU-feasible experiment within budget, following your instructions.{instructions}"
+        "a faithful implementation that reproduces the paper's most informative experiment "
+        "within the compute budget, following your instructions.{instructions}"
     ),
     # Planner reads the paper, may search the web for context, writes only PLAN.md.
     allowed_tools=[*_READ_TOOLS, "Write", "WebFetch", "WebSearch"],
@@ -74,8 +129,8 @@ REVISER = Phase(
 CODER = Phase(
     name="coder",
     task=(
-        "Implement the method described in `PLAN.md` as a clean, minimal, CPU-runnable "
-        "repo, following your instructions."
+        "Implement the method described in `PLAN.md` as a clean, minimal repo, "
+        "following your instructions."
     ),
     allowed_tools=[*_READ_TOOLS, *_WRITE_TOOLS],
 )
@@ -92,7 +147,7 @@ TESTER = Phase(
 BENCHMARKER = Phase(
     name="benchmarker",
     task=(
-        "Run the implementation on CPU, verify each success criterion in `PLAN.md`, write an "
+        "Run the implementation, verify each success criterion in `PLAN.md`, write an "
         "honest `REPORT.md` and a structured verdict, following your instructions."
     ),
     allowed_tools=[*_READ_TOOLS, *_WRITE_TOOLS],

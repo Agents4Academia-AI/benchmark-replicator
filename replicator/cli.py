@@ -25,7 +25,7 @@ from .pipeline import run_pipeline
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="replicate",
-        description="Turn a paper into a clean, minimal, CPU-runnable baseline repo.",
+        description="Turn a paper into a clean, minimal baseline repo.",
     )
     parser.add_argument(
         "url",
@@ -50,6 +50,15 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Extra instructions for the planner: literal text, or a path to a "
         "file whose contents are used (e.g. --instructions notes.md).",
+    )
+    parser.add_argument(
+        "--gpu",
+        action="store_true",
+        default=False,
+        help="Enable GPU mode: the agent targets a CUDA GPU available on this machine. "
+        "Ship ambitious paper-scale default configs plus a reduced --quick verification "
+        "run for the pipeline. Must be run from inside a GPU allocation on HPC clusters "
+        "(e.g. srun --gpus=1 --pty bash). Default: CPU-only.",
     )
     return parser.parse_args(argv)
 
@@ -103,8 +112,10 @@ def main(argv: list[str] | None = None) -> None:
         print(
             f"Instructions: {instructions[:80]}{'…' if len(instructions) > 80 else ''}"
         )
+    if args.gpu:
+        print("Mode:  GPU (full + verification configs)")
     asyncio.run(
-        run_pipeline(repo, model_override=args.model, instructions=instructions)
+        run_pipeline(repo, model_override=args.model, instructions=instructions, gpu=args.gpu)
     )
 
 

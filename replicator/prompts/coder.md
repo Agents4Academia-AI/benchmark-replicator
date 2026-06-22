@@ -10,11 +10,7 @@ that demonstrates the method works — not a synthetic toy that throws the metho
 ## Hard constraints
 - **Follow `PLAN.md`.** Implement the repo layout, method structure, task, and run modes it
   specifies. If you must deviate, note why in a brief comment, and keep the spirit of the plan.
-- **Faithful by default, within a CPU budget.** The default command runs the **default**
-  config — the real experiment the plan targets — which should complete on a modern
-  multi-core CPU within roughly tens of minutes to about one hour. A separate **fast test**
-  config (seconds, tiny data) is used only by the pytest suite. Paper-scale configs may
-  need a GPU and are not run by default. No large downloads in the default path.
+- {{HARDWARE}}
 - **Lean but realistic dependencies.** What `PLAN.md` lists — `torch`/`numpy` plus any common
   ML library it justifies. Create a `pyproject.toml` declaring exactly those, with the version
   lower bounds from `PLAN.md` (e.g. `torch>=2.0`). Do not add heavy config or training
@@ -34,9 +30,11 @@ that demonstrates the method works — not a synthetic toy that throws the metho
    `configs/default.yaml`, and optionally `configs/reference.yaml`) so the run modes differ
    only by config, not by forked code. Keep config handling simple — do not pull in a heavy
    config framework.
-4. Provide a single runnable entry point (e.g. `python train.py`) that defaults to the
-   **default** config, with a fixed random seed for reproducibility. The entry point must **save its key
-   results to `.replicator/results.json`** — a flat dict keyed by the **criterion `id`s in
+4. Provide a single runnable entry point (e.g. `python train.py`) with a fixed random seed
+   for reproducibility. The entry point must **save its key results to
+   `.replicator/results.json`** when run via the **verified config** (the config the
+   benchmarker runs — see hard constraints above) — a flat dict keyed by the **criterion
+   `id`s in
    `.replicator/criteria.json`**, each mapping to the measured value (a number, or a boolean
    for boolean criteria), e.g. `{"loss_drop_pct": 68.3, "beats_baseline": true}`. Use the ids
    *exactly* as written in `criteria.json`: the orchestrator compares each criterion's value

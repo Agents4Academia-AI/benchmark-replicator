@@ -25,7 +25,17 @@ from claude_agent_sdk import (
 )
 
 from .criteria import mechanical_failures
-from .phases import BENCHMARKER, CLEANER, CODER, PLANNER, REPAIR, REVISER, TESTER, Phase
+from .phases import (
+    BENCHMARKER,
+    CLEANER,
+    CODER,
+    PLANNER,
+    REPAIR,
+    REVISER,
+    TESTER,
+    Phase,
+    hardware_profile,
+)
 from .verdict import (
     VERDICT_PATH,
     Verdict,
@@ -74,6 +84,7 @@ async def _run_phase(
     phase: Phase,
     repo: Path,
     model: str,
+    hardware: str,
     *,
     label: str | None = None,
     **task_kwargs: str,
@@ -81,7 +92,9 @@ async def _run_phase(
     """Run one sub-agent to completion, streaming progress and logging the transcript.
 
     ``label`` overrides the log filename and header (so repeated phases like repair
-    get one log per attempt). ``task_kwargs`` fill placeholders in the phase task.
+    get one log per attempt). ``hardware`` is the profile string (CPU_PROFILE or
+    GPU_PROFILE) that fills the ``{{HARDWARE}}`` sentinel in the system prompt.
+    ``task_kwargs`` fill placeholders in the phase task.
     """
     label = label or phase.name
     log_path = repo / _LOG_DIR_NAME / f"{label}.log"
@@ -90,7 +103,7 @@ async def _run_phase(
 
     print(f"\n{'=' * 70}\n▶  {label.upper()}  (model: {model})\n{'=' * 70}")
     options = ClaudeAgentOptions(
-        system_prompt=phase.system_prompt(),
+        system_prompt=phase.system_prompt(hardware),
         cwd=str(repo),
         allowed_tools=phase.allowed_tools,
         permission_mode=phase.permission_mode,
@@ -135,7 +148,7 @@ def _render(message, label: str, log, usage: _PhaseUsage) -> None:
             usage.output_tokens = message.usage.get("output_tokens", 0)
 
 
-async def _run_chat_phase(phase: Phase, repo: Path, model: str) -> _PhaseUsage:
+async def _run_chat_phase(phase: Phase, repo: Path, model: str, hardware: str) -> _PhaseUsage:
     """Drive a multi-turn revision conversation over PLAN.md.
 
     Unlike ``_run_phase`` (a one-shot ``query``), this keeps a stateful ``ClaudeSDKClient``
@@ -157,7 +170,7 @@ async def _run_chat_phase(phase: Phase, repo: Path, model: str) -> _PhaseUsage:
         "  when you're finished to return to the approve prompt."
     )
     options = ClaudeAgentOptions(
-        system_prompt=phase.system_prompt(),
+        system_prompt=phase.system_prompt(hardware),
         cwd=str(repo),
         allowed_tools=phase.allowed_tools,
         permission_mode=phase.permission_mode,
@@ -229,7 +242,7 @@ def _paper_sources(repo: Path) -> str:
 
 
 async def _checkpoint(
-    repo: Path, model_override: str | None, usages: list[_PhaseUsage]
+    repo: Path, model_override: str | None, usages: list[_PhaseUsage], hardware: str
 ) -> bool:
     """Show PLAN.md and ask the user to approve. Returns True to continue.
 
@@ -251,7 +264,7 @@ async def _checkpoint(
             return True
         if choice in ("c", "chat"):
             usages.append(
-                await _run_chat_phase(REVISER, repo, _model(REVISER, model_override))
+                await _run_chat_phase(REVISER, repo, _model(REVISER, model_override), hardware)
             )
             continue
         return False
@@ -284,7 +297,7 @@ def _apply_mechanical_check(repo: Path, verdict: Verdict) -> Verdict:
 
 
 async def _verify_and_repair(
-    repo: Path, model_override: str | None
+    repo: Path, model_override: str | None, hardware: str
 ) -> tuple[bool, list[_PhaseUsage]]:
     """Run the judging phases; on a failure verdict, repair and re-verify.
 
@@ -300,7 +313,7 @@ async def _verify_and_repair(
         failure: Verdict | None = None
         for judge in (TESTER, BENCHMARKER):
             clear_verdict(repo)
-            usages.append(await _run_phase(judge, repo, _model(judge, model_override)))
+            usages.append(await _run_phase(judge, repo, _model(judge, model_override), hardware))
             verdict = read_verdict(repo, judge.name)
             if judge is BENCHMARKER:
                 verdict = _apply_mechanical_check(repo, verdict)
@@ -327,6 +340,7 @@ async def _verify_and_repair(
                 REPAIR,
                 repo,
                 _model(REPAIR, model_override),
+                hardware,
                 label=f"repair-{attempts}",
                 pdf=_paper_pdf(repo),
                 failures=format_failures([failure]),
@@ -357,16 +371,25 @@ def _print_cost_summary(usages: list[_PhaseUsage]) -> None:
 
 
 async def run_pipeline(
-    repo: Path, model_override: str | None = None, instructions: str = ""
+    repo: Path,
+    model_override: str | None = None,
+    instructions: str = "",
+    gpu: bool = False,
 ) -> None:
     """Run the replication pipeline over ``repo``.
 
     Flow: plan → (human checkpoint) → code → verify-and-repair → clean. The cleaner
     only runs over an implementation that passed the judging phases; if repair cannot
     make it pass, the pipeline stops and reports the outstanding failures honestly.
+
+    ``gpu=True`` activates GPU mode: the hardware profile injected into every phase's
+    system prompt switches from CPU_PROFILE to GPU_PROFILE, steering the planner toward
+    ambitious paper-scale default configs plus a separate reduced verification run.
     """
     print(f"\nBaseline replicator → {repo}")
     all_usages: list[_PhaseUsage] = []
+
+    hardware = hardware_profile(gpu)
 
     instructions_block = (
         "\n\nAdditional instructions from the user (treat as authoritative):\n"
@@ -379,18 +402,19 @@ async def run_pipeline(
             PLANNER,
             repo,
             _model(PLANNER, model_override),
+            hardware,
             sources=_paper_sources(repo),
             instructions=instructions_block,
         )
     )
-    if not await _checkpoint(repo, model_override, all_usages):
+    if not await _checkpoint(repo, model_override, all_usages, hardware):
         print("\n✋ Stopped at planning checkpoint. The plan is in PLAN.md.")
         _print_cost_summary(all_usages)
         sys.exit(0)
 
-    all_usages.append(await _run_phase(CODER, repo, _model(CODER, model_override)))
+    all_usages.append(await _run_phase(CODER, repo, _model(CODER, model_override), hardware))
 
-    passed, vr_usages = await _verify_and_repair(repo, model_override)
+    passed, vr_usages = await _verify_and_repair(repo, model_override, hardware)
     all_usages.extend(vr_usages)
 
     if not passed:
@@ -402,6 +426,8 @@ async def run_pipeline(
         _print_cost_summary(all_usages)
         sys.exit(1)
 
-    all_usages.append(await _run_phase(CLEANER, repo, _model(CLEANER, model_override)))
+    all_usages.append(
+        await _run_phase(CLEANER, repo, _model(CLEANER, model_override), hardware)
+    )
     print(f"\n✅ Done. Replicated baseline is in {repo} (see README.md and REPORT.md).")
     _print_cost_summary(all_usages)

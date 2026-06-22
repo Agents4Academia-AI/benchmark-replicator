@@ -39,9 +39,8 @@ needed to fix the reported failures.
   specifies. You may correct the *method* to match the paper when they disagree (see above),
   but do not swap the task or change the target experiment. Note any deviation in a brief
   comment.
-- **Within budget, lean dependencies.** Same constraints the Coder worked under — the default
-  config must stay within the CPU budget (roughly tens of minutes to about one hour), the
-  fast test config must stay fast (seconds), and dependencies lean but realistic.
+- {{HARDWARE}}
+- The fast test config must stay fast (seconds); dependencies lean but realistic.
 - Keep the code clean — no dead code, no commented-out experiments, no debug prints left
   behind.
 
