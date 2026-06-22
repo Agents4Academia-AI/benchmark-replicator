@@ -53,6 +53,7 @@ Options (all forms):
 --out DIR                output directory (default: replications/<arxiv-id> or replications/pdf-<hash>)
 --model MODEL            override the model for all phases (default: opus for plan/code, sonnet otherwise)
 --instructions TEXT|FILE extra instructions for the planner: literal text or a path to a file
+--yes, -y                auto-approve the plan and run without stopping at the human checkpoint
 ```
 
 Use `--instructions` to steer what the planner focuses on before it writes `PLAN.md`:
@@ -93,7 +94,8 @@ sequence of scoped [Claude Agent
 SDK](https://github.com/anthropics/claude-agent-sdk-python) sub-agents &mdash;
 planner, coder, tester, benchmarker, repair, and cleaner &mdash; that share
 state through files in the generated repo. After planning, the pipeline **pauses
-for your approval** of `PLAN.md` before any code is written.
+for your approval** of `PLAN.md` before any code is written. Pass `--yes` to skip
+this checkpoint for unattended runs (e.g. batch jobs on an HPC cluster).
 
 See **[docs/how_it_works.md](docs/how_it_works.md)** for the full pipeline, the
 verify-and-repair loop, and an annotated diagram.

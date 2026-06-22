@@ -242,7 +242,11 @@ def _paper_sources(repo: Path) -> str:
 
 
 async def _checkpoint(
-    repo: Path, model_override: str | None, usages: list[_PhaseUsage], hardware: str
+    repo: Path,
+    model_override: str | None,
+    usages: list[_PhaseUsage],
+    hardware: str,
+    auto_approve: bool = False,
 ) -> bool:
     """Show PLAN.md and ask the user to approve. Returns True to continue.
 
@@ -250,8 +254,16 @@ async def _checkpoint(
     edits PLAN.md (and criteria.json) per the user's requests; the updated plan is then
     re-presented, so plans can be revised before any code lands. The chat's usage is
     appended to ``usages`` so its cost shows up in the final summary.
+
+    When ``auto_approve=True`` the plan is printed and immediately approved without
+    blocking on ``input()``, making the pipeline safe to run unattended.
     """
     plan = repo / "PLAN.md"
+    if auto_approve:
+        print(f"\n{'─' * 70}\n📋  PLAN.md (auto-approved)\n{'─' * 70}")
+        print(plan.read_text() if plan.exists() else "  (PLAN.md was not created!)")
+        print("─" * 70)
+        return True
     while True:
         print(f"\n{'─' * 70}\n📋  PLAN.md (review before implementation)\n{'─' * 70}")
         print(plan.read_text() if plan.exists() else "  (PLAN.md was not created!)")
@@ -375,6 +387,7 @@ async def run_pipeline(
     model_override: str | None = None,
     instructions: str = "",
     gpu: bool = False,
+    auto_approve: bool = False,
 ) -> None:
     """Run the replication pipeline over ``repo``.
 
@@ -407,7 +420,7 @@ async def run_pipeline(
             instructions=instructions_block,
         )
     )
-    if not await _checkpoint(repo, model_override, all_usages, hardware):
+    if not await _checkpoint(repo, model_override, all_usages, hardware, auto_approve):
         print("\n✋ Stopped at planning checkpoint. The plan is in PLAN.md.")
         _print_cost_summary(all_usages)
         sys.exit(0)

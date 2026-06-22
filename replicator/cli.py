@@ -60,6 +60,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "run for the pipeline. Must be run from inside a GPU allocation on HPC clusters "
         "(e.g. srun --gpus=1 --pty bash). Default: CPU-only.",
     )
+    parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        default=False,
+        help="Auto-approve the plan and run the full pipeline without stopping at the "
+        "human checkpoint. Useful for unattended/batch runs (e.g. HPC jobs).",
+    )
     return parser.parse_args(argv)
 
 
@@ -114,8 +122,16 @@ def main(argv: list[str] | None = None) -> None:
         )
     if args.gpu:
         print("Mode:  GPU (full + verification configs)")
+    if args.yes:
+        print("Mode:  auto-approve (no checkpoint)")
     asyncio.run(
-        run_pipeline(repo, model_override=args.model, instructions=instructions, gpu=args.gpu)
+        run_pipeline(
+            repo,
+            model_override=args.model,
+            instructions=instructions,
+            gpu=args.gpu,
+            auto_approve=args.yes,
+        )
     )
 
 
