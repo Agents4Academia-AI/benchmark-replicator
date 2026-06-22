@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import sys
 from pathlib import Path
 
 from .paper import (
@@ -79,6 +80,11 @@ def _resolve_instructions(value: str | None) -> str:
 
 
 def main(argv: list[str] | None = None) -> None:
+    # Line-buffer stdout/stderr so progress streams to the output file when run
+    # non-interactively (e.g. redirected to a Slurm .out), instead of appearing
+    # all at once when the full-buffer flushes at exit.
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
     args = _parse_args(argv)
     source = args.url.strip()
 

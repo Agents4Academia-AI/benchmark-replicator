@@ -99,7 +99,7 @@ async def _run_phase(
     label = label or phase.name
     log_path = repo / _LOG_DIR_NAME / f"{label}.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    log = log_path.open("w")
+    log = log_path.open("w", buffering=1)
 
     print(f"\n{'=' * 70}\n▶  {label.upper()}  (model: {model})\n{'=' * 70}")
     options = ClaudeAgentOptions(
@@ -160,7 +160,7 @@ async def _run_chat_phase(phase: Phase, repo: Path, model: str, hardware: str) -
     label = phase.name
     log_path = repo / _LOG_DIR_NAME / f"{label}.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    log = log_path.open("w")
+    log = log_path.open("w", buffering=1)
     usage = _PhaseUsage(label=label)
 
     print(f"\n{'=' * 70}\n▶  {label.upper()}  (model: {model})\n{'=' * 70}")
