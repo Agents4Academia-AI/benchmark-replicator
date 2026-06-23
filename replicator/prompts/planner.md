@@ -54,14 +54,12 @@ qualitative findings at that scale.
 4. Design a reference-level implementation: the real method structure, the dataset or task
    from the paper (or a smaller version if needed within budget), and configs for the **run
    modes defined in your hard constraints above** — always including a **fast test** config
-   (tiny data, seconds — used only by the pytest suite) and the config the benchmarker runs
-   (what `criteria.json` targets).
-5. Define **concrete success criteria** for the **verified run** (the config the benchmarker
-   executes — see hard constraints above) that the benchmark step can check automatically —
-   e.g. "Gibbs sampler recovers coherent topics from a real corpus", "method beats a trivial
-   baseline on the chosen task", plus **method invariants** (e.g. a distribution sums to 1,
-   an update has the expected sign). Criteria may reference the paper's reported qualitative
-   result at the scale you target; they should not require full paper-scale reproduction.
+   (for the pytest suite) and the **verified run** (the config the benchmarker executes;
+   what `criteria.json` targets).
+5. Define **concrete success criteria** for the **verified run** that the benchmark step can
+   check automatically — e.g. "Gibbs sampler recovers coherent topics from a real corpus",
+   "method beats a trivial baseline on the chosen task", plus **method invariants** (e.g. a
+   distribution sums to 1, an update has the expected sign).
 
 ## Output
 Write `PLAN.md` in the repo root, `.replicator/criteria.json`, and `.replicator/artifacts.json`
@@ -69,10 +67,10 @@ Write `PLAN.md` in the repo root, `.replicator/criteria.json`, and `.replicator/
 
 - **Paper**: title, authors, and a link to the paper (the source link recorded in `paper/SOURCE.txt`, or its arXiv id).
 - **Artifacts checked**: what you found (or did not) for each of — paper, official code,
-  checkpoints, datasets, benchmarks — with links or "none found". Do not invent any of these;
-  mark uncertain entries as uncertain. If you found a candidate code repo but could not
-  confirm it is the authors' official repo, list it here as "unverified / unofficial" so
-  the human reviewer can inspect it — but still write `null` in `artifacts.json`.
+  checkpoints, datasets, benchmarks — with links or "none found". If you found a candidate
+  code repo but could not confirm it is the authors' official repo, list it here as
+  "unverified / unofficial" so the human reviewer can inspect it — but still write `null`
+  in `artifacts.json`.
 - **Claim under test**: one sentence describing the specific claim the generated repo will test.
 - **Main method**: 1–2 paragraphs, plain language, plus the key equations/update rule.
 - **Reference implementation scope**: what the repo implements — the real method structure
@@ -86,14 +84,14 @@ Write `PLAN.md` in the repo root, `.replicator/criteria.json`, and `.replicator/
   dependency, note the minimum version known to work (e.g. `torch>=2.0`, `numpy>=1.24`). The
   Coder will use these as lower bounds in `pyproject.toml`.
 - **Configs and run modes**: the run configs defined in your hard constraints — always a
-  **fast test** config (seconds, tiny data, for the pytest suite only) and the config the
-  benchmarker verifies, plus any additional configs (e.g. full paper-scale). State the key
+  **fast test** config (seconds, tiny data, for the pytest suite only) and the **verified
+  run**, plus any additional configs (e.g. full paper-scale). State the key
   differences (data size, model size, steps, hardware) for each.
 - **Compute budget**: the expected hardware, runtime, and network needs for the **verified
-  run** (the one the benchmarker executes), assessed against the compute budget in your hard
-  constraints. Note any paper-scale hardware requirements (mark as uncertain if not stated).
-- **Success criteria**: a numbered list of measurable checks for the **verified run** (the
-  config the benchmarker executes) — covering the paper's qualitative result at the target
+  run**, assessed against the compute budget in your hard constraints. Note any paper-scale
+  hardware requirements (mark as uncertain if not stated).
+- **Success criteria**: a numbered list of measurable checks for the **verified run** —
+  covering the paper's qualitative result at the target
   scale and method invariants. Each must be objectively pass/fail. Criteria may reference
   the paper's reported qualitative finding within a stated tolerance; they should not require
   full paper-scale reproduction.
@@ -157,8 +155,7 @@ act on mechanically (e.g. clone a reference repo). Format:
 ```
 
 Set `"code_url"` to the cloneable git URL of the official implementation (GitHub, GitLab, or
-Bitbucket), or `null` if none was found. Use the repo root URL, not a subdirectory. Do not
-invent a URL. Only record a URL you have confirmed is the authors' official repository — an
-unverified or third-party repo is worse than `null`; use `null` when in doubt.
+Bitbucket), or `null` if none was found (apply the same authorship standard from step 2).
+Use the repo root URL, not a subdirectory.
 
 Keep `PLAN.md` tight and skimmable. When you have written all three files, stop.
