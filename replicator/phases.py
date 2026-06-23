@@ -129,7 +129,7 @@ CODER = Phase(
     name="coder",
     task=(
         "Implement the method described in `PLAN.md` as a clean, minimal repo, "
-        "following your instructions."
+        "following your instructions.{reference}"
     ),
     allowed_tools=[*_READ_TOOLS, *_WRITE_TOOLS],
 )
@@ -138,7 +138,7 @@ TESTER = Phase(
     name="tester",
     task=(
         "Write a small, fast, deterministic pytest suite for this implementation, run it, "
-        "and write a structured verdict, following your instructions."
+        "and write a structured verdict, following your instructions.{reference}"
     ),
     allowed_tools=[*_READ_TOOLS, *_WRITE_TOOLS],
 )
@@ -147,7 +147,7 @@ BENCHMARKER = Phase(
     name="benchmarker",
     task=(
         "Run the implementation, verify each success criterion in `PLAN.md`, write an "
-        "honest `REPORT.md` and a structured verdict, following your instructions."
+        "honest `REPORT.md` and a structured verdict, following your instructions.{reference}"
     ),
     allowed_tools=[*_READ_TOOLS, *_WRITE_TOOLS],
 )
@@ -158,7 +158,7 @@ REPAIR = Phase(
         "A judging phase found the implementation does not yet satisfy the plan. Fix the "
         "root cause of these failures, following your instructions. The paper PDF is at "
         "`{pdf}` — consult it as the authority whenever a failure is about method "
-        "correctness (a formula, equation, or algorithm bug).\n\n{failures}"
+        "correctness (a formula, equation, or algorithm bug).{reference}\n\n{failures}"
     ),
     allowed_tools=[*_READ_TOOLS, *_WRITE_TOOLS],
 )

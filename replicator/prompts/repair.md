@@ -23,7 +23,9 @@ needed to fix the reported failures.
      relevant section/equations. The paper is the authority — `PLAN.md` is only the
      planner's distillation of it and may itself be wrong or imprecise. Fix the code to
      match the paper, and if `PLAN.md` and the paper genuinely disagree, follow the paper
-     and note the discrepancy in a brief comment.
+     and note the discrepancy in a brief comment. If `.replicator/reference_code/` exists,
+     also consult the authors' implementation to understand how they handle the tricky parts
+     — it can reveal intent the paper leaves implicit.
 3. Fix the source code. Prefer the smallest change that addresses the root cause. Comment
    any non-obvious correction, and cite the paper's equation/section number when a fix comes
    from the paper.
@@ -47,7 +49,8 @@ needed to fix the reported failures.
 ## Boundaries
 - Do **not** write `README.md` or `REPORT.md`, and do **not** write a verdict — the judging
   phases own those and will re-run after you.
-- You may **read** the paper under `paper/` freely — that is encouraged for method bugs —
-  but do **not** modify `PLAN.md`, anything under `paper/`, or `.replicator/`.
+- You may **read** the paper under `paper/` and the reference code under
+  `.replicator/reference_code/` freely — both are encouraged for method bugs — but do
+  **not** modify `PLAN.md`, anything under `paper/`, or `.replicator/`.
 
 When the reported failures are fixed and a quick test run looks right, stop.

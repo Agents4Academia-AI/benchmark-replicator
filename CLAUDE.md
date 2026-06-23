@@ -5,13 +5,18 @@
 ## Pipeline Phases
 
 1. **Planner** (opus): Reads PDF → writes `PLAN.md` with a plan for the most informative
-   experiment within the compute budget, plus `.replicator/criteria.json` — the mechanizable
-   criteria as stable ids + comparison + threshold.
+   experiment within the compute budget, `.replicator/criteria.json` — the mechanizable
+   criteria as stable ids + comparison + threshold — and `.replicator/artifacts.json` recording
+   the official code URL (or null). If official code is found, the planner briefly skims it
+   online to ground hyperparameters and architecture details in the plan.
 2. **Human checkpoint**: User approves, rejects, or `[c]hat`s to revise `PLAN.md` before any
    code is written. The chat opens the **Reviser** (opus): a stateful `ClaudeSDKClient`
    conversation that edits `PLAN.md` / `.replicator/criteria.json` per the user's requests.
-3. **Coder** (opus): Implements the method from the plan. Its entry point writes
-   `.replicator/results.json` keyed by the `criteria.json` ids.
+   After approval, the orchestrator shallow-clones the official repo (if any) into
+   `.replicator/reference_code/` for downstream phases to read.
+3. **Coder** (opus): Implements the method from the plan, using `.replicator/reference_code/`
+   as a read-only reference (when present) to cross-check math and hyperparameters. Its entry
+   point writes `.replicator/results.json` keyed by the `criteria.json` ids.
 4. **Tester** (sonnet): Writes pytest suite, runs tests, writes verdict.
 5. **Benchmarker** (sonnet): Runs end-to-end, judges the qualitative criteria, writes `REPORT.md`
    and verdict. The orchestrator then compares `results.json` against `criteria.json`
@@ -71,9 +76,11 @@ Tester and benchmarker write `.replicator/verdict.json`:
 ├── paper/
 ├── pyproject.toml
 └── .replicator/
-    ├── logs/          # Phase transcripts: planner.log, coder.log, tester.log, benchmarker.log, cleaner.log, repair-*.log
-    ├── criteria.json  # Planner: mechanizable success criteria (stable ids, comparison, threshold, required)
-    ├── results.json   # Coder's entry point: measured values keyed by criteria.json ids
+    ├── logs/              # Phase transcripts: planner.log, coder.log, tester.log, benchmarker.log, cleaner.log, repair-*.log
+    ├── artifacts.json     # Planner: official code URL (or null); orchestrator clones it after checkpoint
+    ├── reference_code/    # Shallow clone of the official repo (when found); read-only reference for coder/repair/judges
+    ├── criteria.json      # Planner: mechanizable success criteria (stable ids, comparison, threshold, required)
+    ├── results.json       # Coder's entry point: measured values keyed by criteria.json ids
     └── verdict.json
 ```
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import re
 import shutil
+import subprocess
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -150,6 +151,44 @@ def copy_local_pdf(src: Path, dest_dir: Path) -> Path:
     if not (dest.exists() and dest.stat().st_size > 0):
         shutil.copy2(src, dest)
     return dest
+
+
+_CLONE_HOSTS = {"github.com", "gitlab.com", "bitbucket.org"}
+
+
+def clone_reference_code(url: str, dest_dir: Path) -> Path | None:
+    """Shallow-clone an official code repository into ``dest_dir`` as a read-only reference.
+
+    Only clones from known code-hosting hosts (GitHub, GitLab, Bitbucket) to avoid
+    fetching arbitrary URLs. Returns ``dest_dir`` on success; returns ``None`` on any
+    failure (network error, private repo, unsupported host, etc.). Never raises — a
+    reference is optional and must not break the pipeline.
+
+    Drops the ``.git`` directory after cloning so the reference does not interfere
+    with the generated repo's git history. Reuses an existing non-empty ``dest_dir``
+    without re-cloning, so re-running the pipeline is cheap.
+    """
+    try:
+        host = urlparse(url).netloc.lower()
+        if host.startswith("www."):
+            host = host[4:]
+        if host not in _CLONE_HOSTS:
+            return None
+        if dest_dir.exists() and any(dest_dir.iterdir()):
+            return dest_dir  # already cloned on a previous run
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["git", "clone", "--depth", "1", "--single-branch", url, str(dest_dir)],
+            check=True,
+            timeout=120,
+            capture_output=True,
+        )
+        git_dir = dest_dir / ".git"
+        if git_dir.exists():
+            shutil.rmtree(git_dir)
+        return dest_dir
+    except Exception:
+        return None
 
 
 def extract_pdf_text(pdf_path: Path) -> Path | None:

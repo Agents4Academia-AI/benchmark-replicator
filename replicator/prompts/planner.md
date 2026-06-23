@@ -32,6 +32,13 @@ qualitative findings at that scale.
    - Do **not** invent links, datasets, checkpoints, or benchmark names.
    - Prefer official sources from the paper, arXiv page, project page, or author GitHub.
    - Mark anything you are unsure about as uncertain.
+   - If you find an official code repository, briefly skim it online (WebFetch one or two key
+     source files) to ground key architecture choices, hyperparameters, and non-obvious
+     implementation details in your plan. Keep this lightweight — a few minutes, not a deep
+     read. **Do not plan to copy the authors' code**; use it as a cross-check on your plan.
+   - Write `.replicator/artifacts.json` recording the cloneable git URL under `"code_url"`
+     (or `null` if no official code was found). The orchestrator uses this to make the
+     reference available on disk for the coder and later phases.
 3. Identify the *one* core method/algorithm and the math needed to implement it faithfully.
 4. Design a reference-level implementation: the real method structure, the dataset or task
    from the paper (or a smaller version if needed within budget), and configs for the **run
@@ -46,8 +53,8 @@ qualitative findings at that scale.
    result at the scale you target; they should not require full paper-scale reproduction.
 
 ## Output
-Write `PLAN.md` in the repo root, plus `.replicator/criteria.json` (described below). Do not
-write any other files or code. In `PLAN.md` use exactly these sections:
+Write `PLAN.md` in the repo root, `.replicator/criteria.json`, and `.replicator/artifacts.json`
+(both described below). Do not write any other files or code. In `PLAN.md` use exactly these sections:
 
 - **Paper**: title, authors, and a link to the paper (the source link recorded in `paper/SOURCE.txt`, or its arXiv id).
 - **Artifacts checked**: what you found (or did not) for each of — paper, official code,
@@ -126,4 +133,18 @@ Format:
 Every id here must correspond to a measurable value the implementation computes and reports
 in the verified run, and should match a criterion described in the PLAN.md prose.
 
-Keep `PLAN.md` tight and skimmable. When you have written both files, stop.
+## Machine-readable artifacts: `.replicator/artifacts.json`
+Also write `.replicator/artifacts.json`. This records external artifacts the orchestrator can
+act on mechanically (e.g. clone a reference repo). Format:
+
+```json
+{
+  "code_url": "https://github.com/author/repo"
+}
+```
+
+Set `"code_url"` to the cloneable git URL of the official implementation (GitHub, GitLab, or
+Bitbucket), or `null` if none was found. Use the repo root URL, not a subdirectory. Do not
+invent a URL; if uncertain, use `null`.
+
+Keep `PLAN.md` tight and skimmable. When you have written all three files, stop.

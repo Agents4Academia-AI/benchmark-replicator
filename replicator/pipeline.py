@@ -9,6 +9,7 @@ is written.
 
 from __future__ import annotations
 
+import json
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -25,6 +26,7 @@ from claude_agent_sdk import (
 )
 
 from .criteria import mechanical_failures
+from .paper import clone_reference_code
 from .phases import (
     BENCHMARKER,
     CLEANER,
@@ -272,6 +274,41 @@ def _paper_sources(repo: Path) -> str:
     return f"the PDF is at `{pdf}`{link}"
 
 
+def _read_code_url(repo: Path) -> str | None:
+    """Read the official code URL from ``.replicator/artifacts.json``, if present.
+
+    Returns the ``code_url`` string when the planner recorded one, ``None`` when the
+    file is absent, malformed, or the planner found no code URL. Mirrors the tolerant
+    approach used in ``_apply_mechanical_check`` for ``criteria.json``.
+    """
+    path = repo / ".replicator" / "artifacts.json"
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text())
+        url = data.get("code_url")
+        return url if isinstance(url, str) and url.strip() else None
+    except Exception:
+        return None
+
+
+def _reference_note(repo: Path) -> str:
+    """Task note pointing phases to the cloned reference code, when present.
+
+    Returns a non-empty string only when ``.replicator/reference_code/`` exists and
+    is non-empty; otherwise returns ``""`` so the ``{reference}`` placeholder in phase
+    tasks expands to nothing and the prompt reads as if it were never there.
+    """
+    ref_dir = repo / ".replicator" / "reference_code"
+    if ref_dir.exists() and any(ref_dir.iterdir()):
+        return (
+            "\n\nThe authors' official implementation is cloned at "
+            "`.replicator/reference_code/` — consult it as a read-only reference "
+            "per your instructions."
+        )
+    return ""
+
+
 async def _checkpoint(
     repo: Path,
     model_override: str | None,
@@ -352,11 +389,12 @@ async def _verify_and_repair(
     """
     attempts = 0
     usages: list[_PhaseUsage] = []
+    reference = _reference_note(repo)
     while True:
         failure: Verdict | None = None
         for judge in (TESTER, BENCHMARKER):
             clear_verdict(repo)
-            usages.append(await _run_phase(judge, repo, _model(judge, model_override), hardware))
+            usages.append(await _run_phase(judge, repo, _model(judge, model_override), hardware, reference=reference))
             verdict = read_verdict(repo, judge.name)
             if judge is BENCHMARKER:
                 verdict = _apply_mechanical_check(repo, verdict)
@@ -387,6 +425,7 @@ async def _verify_and_repair(
                 label=f"repair-{attempts}",
                 pdf=_paper_pdf(repo),
                 failures=format_failures([failure]),
+                reference=reference,
             )
         )
 
@@ -456,7 +495,18 @@ async def run_pipeline(
         _print_cost_summary(all_usages)
         sys.exit(0)
 
-    all_usages.append(await _run_phase(CODER, repo, _model(CODER, model_override), hardware))
+    code_url = _read_code_url(repo)
+    if code_url:
+        ref_dir = repo / ".replicator" / "reference_code"
+        result = clone_reference_code(code_url, ref_dir)
+        if result:
+            print(f"Ref:   cloned {code_url} → {ref_dir.relative_to(repo)}")
+        else:
+            print(f"Ref:   could not clone {code_url} (skipping reference)")
+
+    all_usages.append(
+        await _run_phase(CODER, repo, _model(CODER, model_override), hardware, reference=_reference_note(repo))
+    )
 
     passed, vr_usages = await _verify_and_repair(repo, model_override, hardware)
     all_usages.extend(vr_usages)

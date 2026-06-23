@@ -60,6 +60,14 @@ that demonstrates the method works — not a synthetic toy that throws the metho
    direction. Fix anything that crashes. Keep these iterations fast — save the full default
    run for the benchmarker.
 
+## Reference implementation
+If `.replicator/reference_code/` exists, the authors' official code is cloned there. Consult
+it as a read-only reference to cross-check the math, tensor shapes, hyperparameters, and
+non-obvious implementation details — it can save you from subtle bugs. But **write your own
+clean, minimal implementation** following `PLAN.md`; do not copy code verbatim or carry over
+framework-specific idioms (e.g. JAX/Flax) that conflict with the plan's dependencies. `PLAN.md`
+and the paper remain the authority on what to implement and how.
+
 ## Boundaries
 - Do **not** write the formal test suite — the Tester sub-agent does that next.
 - Do **not** write `README.md` or `REPORT.md` — later sub-agents own those.

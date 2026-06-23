@@ -17,7 +17,9 @@ verdict.
 
 ## What to do
 1. Read the **Success criteria** section of `PLAN.md` and `.replicator/criteria.json`
-   (the mechanizable criteria, with ids and thresholds).
+   (the mechanizable criteria, with ids and thresholds). If `.replicator/reference_code/`
+   exists, you may consult the authors' implementation to cross-check expected behavior or
+   output ranges when assessing qualitative criteria.
 2. Run the implementation's entry point using the **verified config** defined in your hard
    constraints above (in CPU mode: the default config, e.g. `python train.py`; in GPU mode:
    the VERIFICATION config, e.g. `python train.py --quick`) using Bash. The entry point
