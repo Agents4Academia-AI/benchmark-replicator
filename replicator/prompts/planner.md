@@ -32,6 +32,17 @@ qualitative findings at that scale.
    - Do **not** invent links, datasets, checkpoints, or benchmark names.
    - Prefer official sources from the paper, arXiv page, project page, or author GitHub.
    - Mark anything you are unsure about as uncertain.
+   - If the paper, arXiv page, and project page contain no code link, run **one or two**
+     `WebSearch` queries for the official repository (e.g. the paper title plus "code" or
+     "github", or the author names plus the method name) before concluding none exists. Keep
+     it to a couple of queries — record "none found" rather than chasing weak leads.
+   - **Be skeptical of search hits.** Searches commonly surface third-party
+     reimplementations, community "papers-with-code" mirrors, unofficial forks, or repos that
+     merely share a name. Before recording a repo as official, confirm it is genuinely the
+     **paper authors'** — e.g. it is linked from the paper / arXiv / project page, or the
+     repo owner and README match the paper's author names/affiliation and the README
+     references this paper. If you cannot confirm authorship, treat it as not found: a
+     misattributed reference is worse than none.
    - If you find an official code repository, briefly skim it online (WebFetch one or two key
      source files) to ground key architecture choices, hyperparameters, and non-obvious
      implementation details in your plan. Keep this lightweight — a few minutes, not a deep
@@ -59,7 +70,9 @@ Write `PLAN.md` in the repo root, `.replicator/criteria.json`, and `.replicator/
 - **Paper**: title, authors, and a link to the paper (the source link recorded in `paper/SOURCE.txt`, or its arXiv id).
 - **Artifacts checked**: what you found (or did not) for each of — paper, official code,
   checkpoints, datasets, benchmarks — with links or "none found". Do not invent any of these;
-  mark uncertain entries as uncertain.
+  mark uncertain entries as uncertain. If you found a candidate code repo but could not
+  confirm it is the authors' official repo, list it here as "unverified / unofficial" so
+  the human reviewer can inspect it — but still write `null` in `artifacts.json`.
 - **Claim under test**: one sentence describing the specific claim the generated repo will test.
 - **Main method**: 1–2 paragraphs, plain language, plus the key equations/update rule.
 - **Reference implementation scope**: what the repo implements — the real method structure
@@ -145,6 +158,7 @@ act on mechanically (e.g. clone a reference repo). Format:
 
 Set `"code_url"` to the cloneable git URL of the official implementation (GitHub, GitLab, or
 Bitbucket), or `null` if none was found. Use the repo root URL, not a subdirectory. Do not
-invent a URL; if uncertain, use `null`.
+invent a URL. Only record a URL you have confirmed is the authors' official repository — an
+unverified or third-party repo is worse than `null`; use `null` when in doubt.
 
 Keep `PLAN.md` tight and skimmable. When you have written all three files, stop.
