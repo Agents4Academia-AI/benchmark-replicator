@@ -18,6 +18,11 @@ that demonstrates the method works — not a synthetic toy that throws the metho
 - **Clean, modular code.** Small focused files and functions, clear names, docstrings on the
   core method, type hints where they help. No dead code, no commented-out experiments, no
   framework boilerplate. Comment the *non-obvious math* and each major algorithmic step.
+- **Design for testability.** Separate the core method/computation from I/O, config loading,
+  and the training loop so the method can be called in isolation — the Tester sub-agent will
+  unit-test it without running the full pipeline. Prefer pure functions with explicit
+  inputs/outputs for the core algorithm; keep side effects (file writes, logging, data
+  download) at the edges. The core method must be deterministic given a seed and inputs.
 
 ## What to do
 1. Read `PLAN.md` fully, and `.replicator/criteria.json` for the exact criterion ids your
