@@ -17,6 +17,7 @@ from .paper import (
     download_html,
     download_pdf,
     download_pdf_from_url,
+    extract_pdf_text,
     parse_arxiv_id,
     repo_name_for_source,
 )
@@ -105,6 +106,12 @@ def main(argv: list[str] | None = None) -> None:
             if html_path
             else "HTML:  (none — planner will read the PDF)"
         )
+        txt_path = extract_pdf_text(pdf_path)
+        print(
+            f"Text:  {txt_path}"
+            if txt_path
+            else "Text:  (none — planner will read the PDF)"
+        )
         link = f"https://arxiv.org/abs/{arxiv_id}"
     else:
         repo = args.out or (Path("replications") / repo_name_for_source(source))
@@ -117,6 +124,12 @@ def main(argv: list[str] | None = None) -> None:
             print(f"Paper: {source}")
             pdf_path = download_pdf_from_url(source, repo / "paper")
         print(f"PDF:   {pdf_path}")
+        txt_path = extract_pdf_text(pdf_path)
+        print(
+            f"Text:  {txt_path}"
+            if txt_path
+            else "Text:  (none — planner will read the PDF)"
+        )
         link = source
 
     (repo / "paper" / "SOURCE.txt").write_text(link + "\n")

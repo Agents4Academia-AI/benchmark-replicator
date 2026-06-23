@@ -1,7 +1,9 @@
 """Acquire a paper PDF from an arXiv URL/id, a direct PDF URL, or a local file.
 
-Kept deliberately small: only the standard library is used so the orchestrator
-has no dependencies beyond the Claude Agent SDK itself.
+Also pre-extracts PDF text via ``pypdf`` so the planner has a cheap, clean text
+source for any paper — not just arXiv papers that have an HTML rendering. This
+intentionally adds ``pypdf`` as a project dependency (see ``pyproject.toml``);
+the module is no longer stdlib-only.
 """
 
 from __future__ import annotations
@@ -13,6 +15,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from urllib.parse import urlparse
+
+from pypdf import PdfReader as _PdfReader
 
 # Matches the id in forms like:
 #   https://arxiv.org/abs/2017.12345
@@ -146,3 +150,28 @@ def copy_local_pdf(src: Path, dest_dir: Path) -> Path:
     if not (dest.exists() and dest.stat().st_size > 0):
         shutil.copy2(src, dest)
     return dest
+
+
+def extract_pdf_text(pdf_path: Path) -> Path | None:
+    """Extract plain text from ``pdf_path`` and write it alongside the PDF.
+
+    Writes ``<pdf_path.stem>.txt`` in the same directory as ``pdf_path``; if the
+    file already exists and is non-empty it is reused without re-extracting.
+    Returns the ``.txt`` path on success, or ``None`` if extraction fails or
+    yields near-empty output (e.g. scanned/encrypted PDFs) — callers should fall
+    back to the PDF in that case. Never raises.
+    """
+    txt_path = pdf_path.with_suffix(".txt")
+    if txt_path.exists() and txt_path.stat().st_size > 100:
+        return txt_path
+    try:
+        reader = _PdfReader(str(pdf_path))
+        pages = [page.extract_text() or "" for page in reader.pages]
+        text = "\n\n".join(pages).strip()
+    except Exception:
+        return None
+    if len(text) < 500:
+        # Too little text — likely a scanned PDF with no extractable content.
+        return None
+    txt_path.write_text(text, encoding="utf-8")
+    return txt_path

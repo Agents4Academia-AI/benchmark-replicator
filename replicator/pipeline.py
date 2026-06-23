@@ -116,6 +116,14 @@ async def _run_phase(
     try:
         async for message in query(prompt=task, options=options):
             _render(message, label, log, usage)
+    except Exception as exc:
+        if "maximum number of turns" in str(exc).lower():
+            # The SDK yields a ResultMessage(subtype="error_max_turns") before raising,
+            # so cost/usage are already captured. Warn and continue rather than crashing.
+            log.write(f"\n[error] {exc}\n")
+            print(f"  ⚠  {label} hit its max-turns cap — continuing with whatever it produced.")
+        else:
+            raise
     finally:
         log.close()
 
@@ -196,8 +204,15 @@ async def _run_chat_phase(phase: Phase, repo: Path, model: str, hardware: str) -
                 log.write(f"\n[user] {message}\n")
                 await client.query(first_prefix + message if first else message)
                 first = False
-                async for reply in client.receive_response():
-                    _render(reply, label, log, usage)
+                try:
+                    async for reply in client.receive_response():
+                        _render(reply, label, log, usage)
+                except Exception as exc:
+                    if "maximum number of turns" in str(exc).lower():
+                        log.write(f"\n[error] {exc}\n")
+                        print(f"  ⚠  {label} hit its max-turns cap.")
+                    else:
+                        raise
     finally:
         log.close()
 
@@ -219,11 +234,15 @@ def _paper_pdf(repo: Path) -> str:
 
 
 def _paper_sources(repo: Path) -> str:
-    """Describe the reading sources for the planner, preferring HTML when present.
+    """Describe the reading sources for the planner, preferring HTML or plain text.
 
-    arXiv's HTML rendering (when it exists) is cleaner and far cheaper to read than
-    the PDF page-images, but it carries no figures — so the PDF stays the figure and
-    tie-break authority. When there is no HTML, this degrades to the PDF alone.
+    Priority:
+    1. arXiv HTML (when present) — cleanest text + equations; PDF stays the figure/tie-break
+       authority.
+    2. Pre-extracted plain-text file (``paper/<pdf-stem>.txt``) — a ``pypdf`` extraction
+       written by the CLI; good for non-arXiv PDFs with no HTML. Still defer to the PDF for
+       figures or anything the extraction renders ambiguously.
+    3. Raw PDF — fallback when neither of the above exists (e.g. scanned/encrypted papers).
     """
     pdf = _paper_pdf(repo)
     source_file = repo / "paper" / "SOURCE.txt"
@@ -238,6 +257,18 @@ def _paper_sources(repo: Path) -> str:
             f"authoritative and the only source with figures, so consult it for figures "
             f"or anything the HTML renders ambiguously{link}"
         )
+    # Look for a pre-extracted plain-text file (named <pdf-stem>.txt).
+    pdfs = sorted((repo / "paper").glob("*.pdf"))
+    if pdfs:
+        txt_path = pdfs[0].with_suffix(".txt")
+        if txt_path.exists() and txt_path.stat().st_size > 0:
+            rel_txt = f"paper/{txt_path.name}"
+            return (
+                f"a plain-text extraction is at `{rel_txt}` — prefer it, its text is "
+                f"far cheaper to read; the PDF at `{pdf}` is authoritative and the only "
+                f"source with figures, so consult it for figures or anything the text "
+                f"renders ambiguously{link}"
+            )
     return f"the PDF is at `{pdf}`{link}"
 
 

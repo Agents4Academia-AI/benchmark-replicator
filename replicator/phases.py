@@ -112,7 +112,6 @@ PLANNER = Phase(
     ),
     # Planner reads the paper, may search the web for context, writes only PLAN.md.
     allowed_tools=[*_READ_TOOLS, "Write", "WebFetch", "WebSearch"],
-    max_turns=40,
 )
 
 REVISER = Phase(
