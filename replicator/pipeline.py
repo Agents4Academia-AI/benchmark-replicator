@@ -9,7 +9,9 @@ is written.
 
 from __future__ import annotations
 
+import ast
 import json
+import re
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -61,6 +63,10 @@ _DEFAULT_MODELS = {
 
 # How many times the orchestrator will repair-and-re-verify before giving up.
 _MAX_REPAIR_ATTEMPTS = 2
+
+# Upper bound on coder phases parsed from PLAN.md — each phase is a full opus run, so a
+# runaway plan (or an over-eager human edit at the checkpoint) must not multiply cost.
+_MAX_CODER_PHASES = 4
 
 _LOG_DIR_NAME = ".replicator/logs"
 
@@ -452,6 +458,89 @@ def _print_cost_summary(usages: list[_PhaseUsage]) -> None:
     print(f"{'─' * 62}")
 
 
+def _parse_coder_phases(repo: Path) -> list[tuple[str, str]]:
+    """Extract (title, description) pairs from the Implementation Phases section of PLAN.md.
+
+    Returns a single-element list as a fallback when the section is absent or malformed,
+    so the orchestrator degrades gracefully to the old single-phase behaviour.
+    """
+    plan_path = repo / "PLAN.md"
+    if not plan_path.exists():
+        return [("Full implementation", "")]
+    plan = plan_path.read_text()
+    section = re.search(r"## Implementation Phases[^\n]*\n(.*?)(?=\n## |\Z)", plan, re.DOTALL)
+    if not section:
+        return [("Full implementation", "")]
+    # Tolerate any title separator (``Phase 1: Core``, ``Phase 1 — Core``, bare ``Phase 1``)
+    # so a small format drift in the plan doesn't silently revert to a single coder run.
+    phases = re.findall(
+        r"### (Phase \d+[^\n]*)\n(.*?)(?=### Phase \d+|\Z)",
+        section.group(1),
+        re.DOTALL,
+    )
+    if not phases:
+        return [("Full implementation", "")]
+    parsed = [(title.strip(), desc.strip()) for title, desc in phases]
+    if len(parsed) > _MAX_CODER_PHASES:
+        # The plan's final phase builds the entry point (train.py/run.sh), so a plain
+        # truncation would drop it and leave an incomplete repo. Keep the leading phases
+        # and fold the overflow — including the original final phase — into the last slot.
+        print(
+            f"  · PLAN.md lists {len(parsed)} implementation phases; merging the overflow "
+            f"into phase {_MAX_CODER_PHASES} to keep the plan's final (entry-point) phase."
+        )
+        head = parsed[: _MAX_CODER_PHASES - 1]
+        tail = parsed[_MAX_CODER_PHASES - 1 :]
+        merged_title = tail[-1][0]
+        merged_desc = "\n\n".join(f"{title}\n{desc}".strip() for title, desc in tail)
+        parsed = head + [(merged_title, merged_desc)]
+    return parsed
+
+
+def _build_phase_instruction(
+    n: int, total: int, title: str, desc: str, *, is_final: bool
+) -> str:
+    """Build the per-phase task suffix injected into the coder's query prompt."""
+    parts = [f"You are working on **Phase {n} of {total}: {title}**."]
+    if desc:
+        parts.append(desc)
+    if is_final:
+        parts.append(
+            "You are the **final phase**. After implementing your scope, "
+            "do the quick verification run (step 6) to confirm the full "
+            "implementation runs end-to-end."
+        )
+    else:
+        parts.append(
+            f"You are **not** the final phase ({total - n} phase(s) follow). "
+            "Implement your scope and stop — do not wire up the full entry point "
+            "or run a verification run."
+        )
+    return "\n\n".join(parts)
+
+
+def _syntax_check(repo: Path) -> None:
+    """Syntax-check the coder's Python files; warn the operator but never abort.
+
+    Parses each file in-process with ``ast.parse`` (non-mutating — no ``__pycache__``
+    artifacts, and no dependency on a ``python`` executable being on ``PATH``; the
+    pipeline runs under ``uv``). Skips ``.replicator/`` (the vendored reference clone and
+    logs) and ``__pycache__`` so it only ever flags files the coder actually wrote.
+    """
+    errs = []
+    for f in repo.rglob("*.py"):
+        rel = f.relative_to(repo)
+        if ".replicator" in rel.parts or "__pycache__" in rel.parts:
+            continue
+        try:
+            ast.parse(f.read_text(encoding="utf-8"), filename=str(rel))
+        except SyntaxError as exc:
+            errs.append(f"{rel}: {exc}")
+    if errs:
+        joined = "\n".join(errs)
+        print(f"  ⚠ Syntax errors found (next phase will need to fix these):\n{joined[:400]}")
+
+
 async def run_pipeline(
     repo: Path,
     model_override: str | None = None,
@@ -504,9 +593,29 @@ async def run_pipeline(
         else:
             print(f"Ref:   could not clone {code_url} (skipping reference)")
 
-    all_usages.append(
-        await _run_phase(CODER, repo, _model(CODER, model_override), hardware, reference=_reference_note(repo))
-    )
+    reference = _reference_note(repo)
+    coder_phases = _parse_coder_phases(repo)
+    if len(coder_phases) == 1 and coder_phases[0][0] == "Full implementation":
+        print("Coder: no Implementation Phases section found in PLAN.md — running a single coder phase.")
+    else:
+        print(f"Coder: {len(coder_phases)} implementation phase(s) parsed from PLAN.md.")
+    for i, (phase_title, phase_desc) in enumerate(coder_phases):
+        n, total = i + 1, len(coder_phases)
+        is_final = i == total - 1
+        phase_instruction = _build_phase_instruction(
+            n, total, phase_title, phase_desc, is_final=is_final
+        )
+        label = "coder" if total == 1 else f"coder-{n}"
+        all_usages.append(
+            await _run_phase(
+                CODER, repo, _model(CODER, model_override), hardware,
+                label=label,
+                reference=reference,
+                phase_instruction=phase_instruction,
+            )
+        )
+        if not is_final:
+            _syntax_check(repo)
 
     passed, vr_usages = await _verify_and_repair(repo, model_override, hardware)
     all_usages.extend(vr_usages)

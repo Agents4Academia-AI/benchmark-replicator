@@ -24,9 +24,33 @@ that demonstrates the method works — not a synthetic toy that throws the metho
   inputs/outputs for the core algorithm; keep side effects (file writes, logging, data
   download) at the edges. The core method must be deterministic given a seed and inputs.
 
+## Phased implementation
+
+The pipeline runs the coder in sequential phases — each in a fresh context window. State
+is shared only through files on disk.
+
+**At the start of every phase:** read `.replicator/coder-progress.md` if it exists. It
+records which files prior phases created and what each one contains. Do not re-implement
+anything already there; pick up exactly where the prior phase left off.
+
+**At the end of every phase:** write or update `.replicator/coder-progress.md`. List every
+file you created or significantly modified and one sentence on its contents. Be precise —
+the next phase agent will use this to orient itself without re-reading the whole codebase.
+
+**Unit tests:** after implementing your phase, write `pytest` unit tests in
+`tests/test_<module>.py` for every non-trivial function you created. Run them with
+`pytest tests/ -x -q` and fix any failures before writing the progress file and stopping.
+Focus on correctness of individual functions — correct output shapes, expected numerical
+properties, invariants from the paper (e.g. a distribution sums to 1, a loss decreases
+on a toy example). Keep tests fast (milliseconds each).
+
+**Quick verification run (step 6 below):** only perform this if your task says you are the
+**final phase**. Non-final phases should stop once their unit tests pass.
+
 ## What to do
-1. Read `PLAN.md` fully, and `.replicator/criteria.json` for the exact criterion ids your
-   entry point must report.
+1. Read `PLAN.md` fully, `.replicator/criteria.json` for the exact criterion ids your
+   entry point must report, and `.replicator/coder-progress.md` (if it exists) to see
+   what prior phases already implemented.
 2. Create the source files it specifies. Centre the design on the core algorithm — make the
    method itself the clearest, best-documented part of the code, faithful to the paper's
    structure. Prefer a small but realistic dataset/task over a purely synthetic toy when
@@ -69,10 +93,15 @@ framework-specific idioms (e.g. JAX/Flax) that conflict with the plan's dependen
 and the paper remain the authority on what to implement and how.
 
 ## Boundaries
-- Do **not** write the formal test suite — the Tester sub-agent does that next.
+- Write unit tests for your own phase (see above), but do **not** write integration
+  tests or end-to-end tests — the Tester sub-agent owns the full suite and will extend
+  what you wrote.
 - Do **not** write `README.md` or `REPORT.md` — later sub-agents own those.
 - Do **not** touch `PLAN.md`, `paper/`, or the planner's `.replicator/criteria.json`. Your
   entry point writes `.replicator/results.json` at runtime — that is expected — but do not
-  edit other files under `.replicator/` by hand.
+  edit other files under `.replicator/` by hand. The one exception is
+  `.replicator/coder-progress.md`: you write and update it by hand as the phase handoff
+  file (see *Phased implementation* above).
 
-When the code runs and the method behaves as expected on a quick test, stop.
+When your phase's scope is implemented (and the full implementation runs end-to-end on
+a quick test, if you are the final phase), update `.replicator/coder-progress.md` and stop.

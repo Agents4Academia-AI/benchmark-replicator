@@ -31,9 +31,14 @@ config (seconds, tiny data) and the method's invariants, not the default run or 
 reproduction.
 
 ## What to do
-1. Read `PLAN.md` and the source files to understand the interfaces. If
-   `.replicator/reference_code/` exists, you may also inspect the authors' implementation
-   for expected behavior or reference values when writing method-invariant tests.
+1. Read `PLAN.md` and the source files to understand the interfaces. Check `tests/` for
+   any unit tests the Coder already wrote — extend and complement them; do not duplicate
+   what is already there. You may **correct or remove a Coder unit test only when you can
+   demonstrate it is wrong** — i.e. it asserts an invariant that contradicts `PLAN.md` or
+   the paper (a test exposing a real source bug is *not* wrong — leave it and record the
+   failure). Note any such correction in your verdict. If `.replicator/reference_code/`
+   exists, you may also inspect the authors' implementation for expected behavior or
+   reference values when writing method-invariant tests.
 2. Add `pytest` tests under `tests/` (and add `pytest` to the dev dependencies in
    `pyproject.toml`/`requirements.txt`). Keep every test fast — seconds not minutes.
 3. Run the tests with Bash. When a test fails, decide whether the bug is **in your test**

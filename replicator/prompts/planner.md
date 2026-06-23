@@ -101,6 +101,18 @@ Write `PLAN.md` in the repo root, `.replicator/criteria.json`, and `.replicator/
 - **Gap to paper**: what the generated repo will *not* reproduce (experiments, datasets,
   benchmarks, or claims left out of scope).
 - **Risks / open questions**: anything genuinely ambiguous in the paper.
+- **Implementation phases**: break the implementation into 2–4 sequential phases. Unlike
+  the sections above, render this as its own top-level `## Implementation Phases` heading
+  (an H2 section, *not* a `- **...**:` bullet), and write each phase as a `### Phase N: <title>`
+  sub-heading — keep that exact form (the literal word `Phase`, the number, then a colon and
+  title), since the orchestrator parses these headings to drive the coder. Follow each
+  sub-heading with 2–4 sentences naming exactly which files to create and what each one
+  should contain. Rules: group tightly related files into one phase; put the math-heavy core
+  algorithm (model, method equations) in its own phase; put `train.py` (the entry point)
+  and `run.sh` in the final phase. Simple papers (≤ 4 files) may use 2 phases; complex
+  papers may use up to 4. Each phase is implemented by a fresh coding agent that reads
+  what prior phases left on disk — be precise enough that a new agent can orient itself
+  without re-reading the paper.
 
 ## Machine-readable criteria: `.replicator/criteria.json`
 Also write `.replicator/criteria.json`. This is the *mechanical* half of the success

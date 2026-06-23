@@ -129,7 +129,7 @@ CODER = Phase(
     name="coder",
     task=(
         "Implement the method described in `PLAN.md` as a clean, minimal repo, "
-        "following your instructions.{reference}"
+        "following your instructions.{reference}\n\n{phase_instruction}"
     ),
     allowed_tools=[*_READ_TOOLS, *_WRITE_TOOLS],
 )
