@@ -241,7 +241,7 @@ def _paper_sources(repo: Path) -> str:
     Priority:
     1. arXiv HTML (when present) — cleanest text + equations; PDF stays the figure/tie-break
        authority.
-    2. Pre-extracted plain-text file (``paper/<pdf-stem>.txt``) — a ``pypdf`` extraction
+    2. Pre-extracted plain-text file (``paper/<pdf-stem>.txt``) — a ``pymupdf`` extraction
        written by the CLI; good for non-arXiv PDFs with no HTML. Still defer to the PDF for
        figures or anything the extraction renders ambiguously.
     3. Raw PDF — fallback when neither of the above exists (e.g. scanned/encrypted papers).

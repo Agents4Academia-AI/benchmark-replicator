@@ -1,8 +1,8 @@
 """Acquire a paper PDF from an arXiv URL/id, a direct PDF URL, or a local file.
 
-Also pre-extracts PDF text via ``pypdf`` so the planner has a cheap, clean text
+Also pre-extracts PDF text via ``pymupdf`` so the planner has a cheap, clean text
 source for any paper — not just arXiv papers that have an HTML rendering. This
-intentionally adds ``pypdf`` as a project dependency (see ``pyproject.toml``);
+intentionally adds ``pymupdf`` as a project dependency (see ``pyproject.toml``);
 the module is no longer stdlib-only.
 """
 
@@ -17,7 +17,7 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import urlparse
 
-from pypdf import PdfReader as _PdfReader
+import pymupdf
 
 # Matches the id in forms like:
 #   https://arxiv.org/abs/2017.12345
@@ -204,8 +204,8 @@ def extract_pdf_text(pdf_path: Path) -> Path | None:
     if txt_path.exists() and txt_path.stat().st_size > 100:
         return txt_path
     try:
-        reader = _PdfReader(str(pdf_path))
-        pages = [page.extract_text() or "" for page in reader.pages]
+        doc = pymupdf.open(str(pdf_path))
+        pages = [page.get_text() for page in doc]
         text = "\n\n".join(pages).strip()
     except Exception:
         return None
