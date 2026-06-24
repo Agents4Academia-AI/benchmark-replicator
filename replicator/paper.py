@@ -191,6 +191,17 @@ def clone_reference_code(url: str, dest_dir: Path) -> Path | None:
         return None
 
 
+def pdf_to_text(pdf_path: Path) -> str:
+    """Extract and return all plain text from a PDF via ``pymupdf``.
+
+    Raises on a malformed or unreadable PDF (callers decide how to report it). Used
+    both by :func:`extract_pdf_text` and by the Read tool, so a phase pointed at a raw
+    ``paper/*.pdf`` gets readable text instead of a binary-decode error.
+    """
+    doc = pymupdf.open(str(pdf_path))
+    return "\n\n".join(page.get_text() for page in doc).strip()
+
+
 def extract_pdf_text(pdf_path: Path) -> Path | None:
     """Extract plain text from ``pdf_path`` and write it alongside the PDF.
 
@@ -204,9 +215,7 @@ def extract_pdf_text(pdf_path: Path) -> Path | None:
     if txt_path.exists() and txt_path.stat().st_size > 100:
         return txt_path
     try:
-        doc = pymupdf.open(str(pdf_path))
-        pages = [page.get_text() for page in doc]
-        text = "\n\n".join(pages).strip()
+        text = pdf_to_text(pdf_path)
     except Exception:
         return None
     if len(text) < 500:

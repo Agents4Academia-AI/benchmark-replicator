@@ -1,10 +1,10 @@
 """The code-driven orchestrator: run each sub-agent phase in order on one repo.
 
 The orchestration is deterministic Python — we do not rely on the model to
-auto-delegate. Each phase is an independent ``query()`` with a fresh context;
-state is shared only through files in the generated repo. After the planner
-phase the pipeline pauses for the user to approve ``PLAN.md`` before any code
-is written.
+auto-delegate. Each phase is an independent agent run (see ``agent.py``) with a
+fresh context; state is shared only through files in the generated repo. After the
+planner phase the pipeline pauses for the user to approve ``PLAN.md`` before any
+code is written.
 """
 
 from __future__ import annotations
@@ -13,20 +13,9 @@ import ast
 import json
 import re
 import sys
-from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 
-from claude_agent_sdk import (
-    AssistantMessage,
-    ClaudeAgentOptions,
-    ClaudeSDKClient,
-    ResultMessage,
-    TextBlock,
-    ToolUseBlock,
-    query,
-)
-
+from .agent import PhaseUsage, resolve_model, run_agent, run_chat_agent
 from .criteria import mechanical_failures
 from .paper import clone_reference_code
 from .phases import (
@@ -49,191 +38,12 @@ from .verdict import (
     write_verdict,
 )
 
-# Default model per phase: spend on the hard reasoning steps, save on the rest.
-# Overridden wholesale by an explicit --model on the CLI.
-_DEFAULT_MODELS = {
-    "planner": "opus",
-    "reviser": "opus",  # Conversationally revising the plan is the same hard reasoning.
-    "coder": "opus",
-    "tester": "sonnet",
-    "benchmarker": "sonnet",
-    "repair": "opus",  # Fixing real bugs is hard reasoning — use the strong model.
-    "cleaner": "sonnet",
-}
-
 # How many times the orchestrator will repair-and-re-verify before giving up.
 _MAX_REPAIR_ATTEMPTS = 2
 
 # Upper bound on coder phases parsed from PLAN.md — each phase is a full opus run, so a
 # runaway plan (or an over-eager human edit at the checkpoint) must not multiply cost.
 _MAX_CODER_PHASES = 4
-
-_LOG_DIR_NAME = ".replicator/logs"
-
-
-@dataclass
-class _PhaseUsage:
-    label: str
-    cost_usd: float = 0.0
-    input_tokens: int = 0
-    output_tokens: int = 0
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%H:%M:%S")
-
-
-def _short(text: str, limit: int = 500) -> str:
-    text = text.strip()
-    return text if len(text) <= limit else text[:limit] + " […]"
-
-
-async def _run_phase(
-    phase: Phase,
-    repo: Path,
-    model: str,
-    hardware: str,
-    *,
-    label: str | None = None,
-    **task_kwargs: str,
-) -> _PhaseUsage:
-    """Run one sub-agent to completion, streaming progress and logging the transcript.
-
-    ``label`` overrides the log filename and header (so repeated phases like repair
-    get one log per attempt). ``hardware`` is the profile string (CPU_PROFILE or
-    GPU_PROFILE) that fills the ``{{HARDWARE}}`` sentinel in the system prompt.
-    ``task_kwargs`` fill placeholders in the phase task.
-    """
-    label = label or phase.name
-    log_path = repo / _LOG_DIR_NAME / f"{label}.log"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    log = log_path.open("w", buffering=1)
-
-    print(f"\n{'=' * 70}\n▶  {label.upper()}  (model: {model})\n{'=' * 70}")
-    options = ClaudeAgentOptions(
-        system_prompt=phase.system_prompt(hardware),
-        cwd=str(repo),
-        allowed_tools=phase.allowed_tools,
-        permission_mode=phase.permission_mode,
-        max_turns=phase.max_turns,
-        model=model,
-    )
-    task = phase.task.format(**task_kwargs)
-    usage = _PhaseUsage(label=label)
-
-    try:
-        async for message in query(prompt=task, options=options):
-            _render(message, label, log, usage)
-    except Exception as exc:
-        if "maximum number of turns" in str(exc).lower():
-            # The SDK yields a ResultMessage(subtype="error_max_turns") before raising,
-            # so cost/usage are already captured. Warn and continue rather than crashing.
-            log.write(f"\n[error] {exc}\n")
-            print(f"  ⚠  {label} hit its max-turns cap — continuing with whatever it produced.")
-        else:
-            raise
-    finally:
-        log.close()
-
-    return usage
-
-
-def _render(message, label: str, log, usage: _PhaseUsage) -> None:
-    """Print and log one streamed SDK message, keeping latest cost/token totals.
-
-    Shared by the one-shot phases (``_run_phase``) and the interactive revision chat
-    (``_run_chat_phase``). The SDK reports session totals in ``ResultMessage``; keep
-    the latest totals instead of adding them across chat turns.
-    """
-    if isinstance(message, AssistantMessage):
-        for block in message.content:
-            if isinstance(block, TextBlock) and block.text.strip():
-                print(f"  [{_now()}] {_short(block.text)}")
-                log.write(f"\n[assistant] {block.text}\n")
-            elif isinstance(block, ToolUseBlock):
-                target = _tool_target(block.input)
-                print(f"  [{_now()}] · {block.name}{target}")
-                log.write(f"[tool] {block.name} {block.input}\n")
-    elif isinstance(message, ResultMessage):
-        print(f"  [{_now()}] ✔ {label} finished ({message.subtype})")
-        log.write(f"\n[result] {message.subtype}\n")
-        if message.total_cost_usd is not None:
-            usage.cost_usd = message.total_cost_usd
-        if message.usage:
-            usage.input_tokens = message.usage.get("input_tokens", 0)
-            usage.output_tokens = message.usage.get("output_tokens", 0)
-
-
-async def _run_chat_phase(phase: Phase, repo: Path, model: str, hardware: str) -> _PhaseUsage:
-    """Drive a multi-turn revision conversation over PLAN.md.
-
-    Unlike ``_run_phase`` (a one-shot ``query``), this keeps a stateful ``ClaudeSDKClient``
-    session open so the agent remembers the conversation: the user types successive revision
-    requests and the agent edits ``PLAN.md`` / ``.replicator/criteria.json`` in place. The
-    whole session lives inside this one coroutine (the SDK forbids using a client across
-    async contexts). Returns the session usage totals for the cost summary.
-    """
-    label = phase.name
-    log_path = repo / _LOG_DIR_NAME / f"{label}.log"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    log = log_path.open("w", buffering=1)
-    usage = _PhaseUsage(label=label)
-
-    print(f"\n{'=' * 70}\n▶  {label.upper()}  (model: {model})\n{'=' * 70}")
-    print(
-        "  Chat to revise PLAN.md and criteria.json. Type a request and press Enter;\n"
-        "  the agent edits the plan and reports back. Type 'done' (or an empty line)\n"
-        "  when you're finished to return to the approve prompt."
-    )
-    options = ClaudeAgentOptions(
-        system_prompt=phase.system_prompt(hardware),
-        cwd=str(repo),
-        allowed_tools=phase.allowed_tools,
-        permission_mode=phase.permission_mode,
-        max_turns=phase.max_turns,
-        model=model,
-    )
-    # First message tells the agent where the paper lives, like the planner is told.
-    first_prefix = (
-        f"You are revising the existing PLAN.md and .replicator/criteria.json. For reference, "
-        f"{_paper_sources(repo)}.\n\nMy first request:\n"
-    )
-
-    try:
-        async with ClaudeSDKClient(options=options) as client:
-            first = True
-            while True:
-                try:
-                    message = input("\nyou › ").strip()
-                except EOFError:
-                    break
-                if message.lower() in ("", "done", "exit", "quit"):
-                    break
-                log.write(f"\n[user] {message}\n")
-                await client.query(first_prefix + message if first else message)
-                first = False
-                try:
-                    async for reply in client.receive_response():
-                        _render(reply, label, log, usage)
-                except Exception as exc:
-                    if "maximum number of turns" in str(exc).lower():
-                        log.write(f"\n[error] {exc}\n")
-                        print(f"  ⚠  {label} hit its max-turns cap.")
-                    else:
-                        raise
-    finally:
-        log.close()
-
-    return usage
-
-
-def _tool_target(tool_input: dict) -> str:
-    """A compact hint of what a tool call is acting on, for the progress line."""
-    for key in ("file_path", "path", "command", "pattern", "url"):
-        if key in tool_input:
-            return f" → {_short(str(tool_input[key]), 80)}"
-    return ""
-
 
 def _paper_pdf(repo: Path) -> str:
     """Path to the downloaded paper PDF, relative to the repo (for the repair task)."""
@@ -317,8 +127,10 @@ def _reference_note(repo: Path) -> str:
 
 async def _checkpoint(
     repo: Path,
+    provider: str,
     model_override: str | None,
-    usages: list[_PhaseUsage],
+    base_url: str | None,
+    usages: list[PhaseUsage],
     hardware: str,
     auto_approve: bool = False,
 ) -> bool:
@@ -350,14 +162,21 @@ async def _checkpoint(
             return True
         if choice in ("c", "chat"):
             usages.append(
-                await _run_chat_phase(REVISER, repo, _model(REVISER, model_override), hardware)
+                await run_chat_agent(
+                    REVISER,
+                    repo,
+                    _model(REVISER, provider, model_override),
+                    hardware,
+                    base_url,
+                    paper_sources=_paper_sources(repo),
+                )
             )
             continue
         return False
 
 
-def _model(phase: Phase, override: str | None) -> str:
-    return override or _DEFAULT_MODELS[phase.name]
+def _model(phase: Phase, provider: str, override: str | None) -> str:
+    return resolve_model(phase.name, provider, override)
 
 
 def _apply_mechanical_check(repo: Path, verdict: Verdict) -> Verdict:
@@ -383,8 +202,8 @@ def _apply_mechanical_check(repo: Path, verdict: Verdict) -> Verdict:
 
 
 async def _verify_and_repair(
-    repo: Path, model_override: str | None, hardware: str
-) -> tuple[bool, list[_PhaseUsage]]:
+    repo: Path, provider: str, model_override: str | None, base_url: str | None, hardware: str
+) -> tuple[bool, list[PhaseUsage]]:
     """Run the judging phases; on a failure verdict, repair and re-verify.
 
     Each round runs the tester then the benchmarker. They only diagnose — a failing
@@ -394,13 +213,18 @@ async def _verify_and_repair(
     :data:`_MAX_REPAIR_ATTEMPTS`.
     """
     attempts = 0
-    usages: list[_PhaseUsage] = []
+    usages: list[PhaseUsage] = []
     reference = _reference_note(repo)
     while True:
         failure: Verdict | None = None
         for judge in (TESTER, BENCHMARKER):
             clear_verdict(repo)
-            usages.append(await _run_phase(judge, repo, _model(judge, model_override), hardware, reference=reference))
+            usages.append(
+                await run_agent(
+                    judge, repo, _model(judge, provider, model_override), hardware, base_url,
+                    reference=reference,
+                )
+            )
             verdict = read_verdict(repo, judge.name)
             if judge is BENCHMARKER:
                 verdict = _apply_mechanical_check(repo, verdict)
@@ -423,11 +247,12 @@ async def _verify_and_repair(
             f"(triggered by {failure.phase})."
         )
         usages.append(
-            await _run_phase(
+            await run_agent(
                 REPAIR,
                 repo,
-                _model(REPAIR, model_override),
+                _model(REPAIR, provider, model_override),
                 hardware,
+                base_url,
                 label=f"repair-{attempts}",
                 pdf=_paper_pdf(repo),
                 failures=format_failures([failure]),
@@ -436,10 +261,16 @@ async def _verify_and_repair(
         )
 
 
-def _print_cost_summary(usages: list[_PhaseUsage]) -> None:
-    total_cost = sum(u.cost_usd for u in usages)
+def _fmt_cost(cost: float | None) -> str:
+    """USD cell for the summary, or a dash when the model's price is unknown."""
+    return f"${cost:>9.4f}" if cost is not None else f"{'—':>10}"
+
+
+def _print_cost_summary(usages: list[PhaseUsage]) -> None:
     total_in = sum(u.input_tokens for u in usages)
     total_out = sum(u.output_tokens for u in usages)
+    costs = [u.cost_usd for u in usages if u.cost_usd is not None]
+    total_cost = sum(costs) if costs else None
 
     w = 18  # label column width
     print(f"\n{'─' * 62}")
@@ -451,10 +282,10 @@ def _print_cost_summary(usages: list[_PhaseUsage]) -> None:
     print(f"  {'─' * (w)}  {'─' * 10}  {'─' * 10}  {'─' * 10}")
     for u in usages:
         print(
-            f"  {u.label:<{w}}  {u.input_tokens:>10,}  {u.output_tokens:>10,}  ${u.cost_usd:>9.4f}"
+            f"  {u.label:<{w}}  {u.input_tokens:>10,}  {u.output_tokens:>10,}  {_fmt_cost(u.cost_usd)}"
         )
     print(f"  {'─' * (w)}  {'─' * 10}  {'─' * 10}  {'─' * 10}")
-    print(f"  {'TOTAL':<{w}}  {total_in:>10,}  {total_out:>10,}  ${total_cost:>9.4f}")
+    print(f"  {'TOTAL':<{w}}  {total_in:>10,}  {total_out:>10,}  {_fmt_cost(total_cost)}")
     print(f"{'─' * 62}")
 
 
@@ -543,7 +374,9 @@ def _syntax_check(repo: Path) -> None:
 
 async def run_pipeline(
     repo: Path,
+    provider: str = "anthropic",
     model_override: str | None = None,
+    base_url: str | None = None,
     instructions: str = "",
     gpu: bool = False,
     auto_approve: bool = False,
@@ -559,7 +392,7 @@ async def run_pipeline(
     ambitious paper-scale default configs plus a separate reduced verification run.
     """
     print(f"\nBaseline replicator → {repo}")
-    all_usages: list[_PhaseUsage] = []
+    all_usages: list[PhaseUsage] = []
 
     hardware = hardware_profile(gpu)
 
@@ -570,16 +403,19 @@ async def run_pipeline(
         else ""
     )
     all_usages.append(
-        await _run_phase(
+        await run_agent(
             PLANNER,
             repo,
-            _model(PLANNER, model_override),
+            _model(PLANNER, provider, model_override),
             hardware,
+            base_url,
             sources=_paper_sources(repo),
             instructions=instructions_block,
         )
     )
-    if not await _checkpoint(repo, model_override, all_usages, hardware, auto_approve):
+    if not await _checkpoint(
+        repo, provider, model_override, base_url, all_usages, hardware, auto_approve
+    ):
         print("\n✋ Stopped at planning checkpoint. The plan is in PLAN.md.")
         _print_cost_summary(all_usages)
         sys.exit(0)
@@ -607,8 +443,8 @@ async def run_pipeline(
         )
         label = "coder" if total == 1 else f"coder-{n}"
         all_usages.append(
-            await _run_phase(
-                CODER, repo, _model(CODER, model_override), hardware,
+            await run_agent(
+                CODER, repo, _model(CODER, provider, model_override), hardware, base_url,
                 label=label,
                 reference=reference,
                 phase_instruction=phase_instruction,
@@ -617,7 +453,9 @@ async def run_pipeline(
         if not is_final:
             _syntax_check(repo)
 
-    passed, vr_usages = await _verify_and_repair(repo, model_override, hardware)
+    passed, vr_usages = await _verify_and_repair(
+        repo, provider, model_override, base_url, hardware
+    )
     all_usages.extend(vr_usages)
 
     if not passed:
@@ -630,7 +468,7 @@ async def run_pipeline(
         sys.exit(1)
 
     all_usages.append(
-        await _run_phase(CLEANER, repo, _model(CLEANER, model_override), hardware)
+        await run_agent(CLEANER, repo, _model(CLEANER, provider, model_override), hardware, base_url)
     )
     print(f"\n✅ Done. Replicated baseline is in {repo} (see README.md and REPORT.md).")
     _print_cost_summary(all_usages)

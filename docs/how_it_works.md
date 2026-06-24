@@ -102,28 +102,32 @@ a local PDF path. `paper.py` (standard library only) resolves the source and pop
   header). No HTML in this case.
 
 The source link is recorded in `paper/SOURCE.txt`. Optional `--instructions` (literal text
-or a file path) are passed through to the planner; `--model` overrides the per-phase model
-for every phase. The CLI then hands the prepared repo to `run_pipeline` (`pipeline.py`).
+or a file path) are passed through to the planner. `--provider` selects the LLM provider
+(Anthropic by default; OpenAI, Google, or a local model), `--model` overrides every phase's
+model with a single `provider:model` id, and `--base-url` points at a local OpenAI-compatible
+server (vLLM / llama.cpp). The CLI then hands the prepared repo to `run_pipeline` (`pipeline.py`).
 
 ## How each phase runs
 
-Every phase is one independent `query()` to the Claude Agent SDK with a **fresh context**
-(`_run_phase` in `pipeline.py`). A phase (`phases.py`) is a small dataclass bundling:
+Every phase is one independent LangGraph tool-calling agent with a **fresh context**
+(`run_agent` in `agent.py`). A phase (`phases.py`) is a small dataclass bundling:
 
 - a **system prompt** loaded from `prompts/<name>.md`,
 - a **task** string (the per-run instruction; placeholders like `{sources}`, `{pdf}`,
   `{failures}` are filled by the orchestrator),
-- an **allowed tool set** (everything else is unavailable to that agent),
-- a **permission mode** (`acceptEdits`), and
-- a **turn cap** (`max_turns`) to bound cost.
+- an **allowed tool set** (everything else is unavailable to that agent), and
+- a **turn cap** (`max_turns`, mapped to the graph recursion limit) to bound cost.
 
-As each phase streams, the orchestrator prints progress lines and writes a full transcript
-to `.replicator/logs/<phase>.log`. Per-phase cost and token usage are captured from the
-SDK's `ResultMessage` and reported in a cost summary table at the end.
+The tools (`Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`, `WebFetch`, `WebSearch`) are
+defined in `agent.py` and bound to the generated repo. As each phase streams, the orchestrator
+prints progress lines and writes a full transcript to `.replicator/logs/<phase>.log`. Per-phase
+token usage is summed from each message's `usage_metadata`, and a USD cost is shown when the
+model's price is known &mdash; reported in a cost summary table at the end.
 
-**Default models** (`_DEFAULT_MODELS`): opus for the hard reasoning steps
-(planner, reviser, coder, repair), sonnet for the rest (tester, benchmarker, cleaner). A
-`--model` flag overrides all of them.
+**Default models** (`agent.py`): each phase is a *strong* or *cheap* tier &mdash; strong for
+the hard reasoning steps (planner, reviser, coder, repair), cheap for the rest (tester,
+benchmarker, cleaner). `--provider` maps those tiers to that provider's default pair (e.g.
+opus/sonnet for Anthropic); a `--model` flag overrides every phase with one model id.
 
 ## The phases in detail
 
@@ -150,8 +154,8 @@ The orchestrator prints `PLAN.md` and asks the user to approve (`_checkpoint`):
 No code is written until the plan is approved.
 
 ### ② Reviser (opus) &mdash; only on `[c]hat`
-Unlike the one-shot phases, this is a **stateful** `ClaudeSDKClient` conversation
-(`_run_chat_phase`). The user types successive revision requests; the agent remembers the
+Unlike the one-shot phases, this is a **stateful** conversation kept across turns by a
+LangGraph checkpointer (`run_chat_agent`). The user types successive revision requests; the agent remembers the
 conversation and edits `PLAN.md` / `.replicator/criteria.json` in place (it has `Edit` in
 addition to the planner's tools). The first message tells it where the paper lives. Typing
 `done`/`exit`/`quit` or an empty line returns to the approve prompt with the updated plan.

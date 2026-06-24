@@ -90,12 +90,15 @@ CPU); the repo also ships a **fast test** config (seconds, used by pytest) and a
 ## How it works
 
 A deterministic Python orchestrator (`replicator/pipeline.py`) runs a fixed
-sequence of scoped [Claude Agent
-SDK](https://github.com/anthropics/claude-agent-sdk-python) sub-agents &mdash;
-planner, coder, tester, benchmarker, repair, and cleaner &mdash; that share
-state through files in the generated repo. After planning, the pipeline **pauses
-for your approval** of `PLAN.md` before any code is written. Pass `--yes` to skip
-this checkpoint for unattended runs (e.g. batch jobs on an HPC cluster).
+sequence of scoped LLM sub-agents &mdash; planner, coder, tester, benchmarker,
+repair, and cleaner &mdash; that share state through files in the generated repo.
+Each sub-agent is a [LangGraph](https://github.com/langchain-ai/langgraph)
+tool-calling agent over the provider you choose via
+[LangChain](https://github.com/langchain-ai/langchain)'s `init_chat_model`:
+Anthropic (default), OpenAI, Google, or a local model (ollama / llama.cpp / vLLM).
+After planning, the pipeline **pauses for your approval** of `PLAN.md` before any
+code is written. Pass `--yes` to skip this checkpoint for unattended runs (e.g.
+batch jobs on an HPC cluster).
 
 See **[docs/how_it_works.md](docs/how_it_works.md)** for the full pipeline, the
 verify-and-repair loop, and an annotated diagram.
@@ -106,7 +109,8 @@ verify-and-repair loop, and an annotated diagram.
 replicator/
 ├── cli.py        # argument parsing + entry point
 ├── paper.py      # arXiv/PDF URL or local file → PDF (stdlib only)
-├── phases.py     # the five sub-agents: scope, tools, prompts, turn caps
+├── phases.py     # the sub-agents: scope, tools, prompts, turn caps
+├── agent.py      # provider-agnostic backend: models, tools, run a phase
 ├── pipeline.py   # orchestrator: runs phases, streams progress, planning checkpoint
 └── prompts/      # one system prompt per sub-agent
 ```
