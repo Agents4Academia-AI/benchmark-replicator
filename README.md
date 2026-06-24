@@ -11,43 +11,26 @@ build on, plus the experiments to reproduce the paper's key results.
 
 Requires Python ≥ 3.14.
 
-With [uv](https://docs.astral.sh/uv/) (recommended):
-
 ```bash
-uv sync          # install into the project's virtual environment
-```
-
-With pip:
-
-```bash
-pip install .    # or: pip install -e . for an editable install
+python -m venv .venv && source .venv/bin/activate
+pip install .
 ```
 
 ## Usage
 
-With uv:
-
 ```bash
-uv run replicate https://arxiv.org/abs/<id>
+replicate https://arxiv.org/abs/<id>
 ```
 
 The input can be an arXiv URL/id, a direct PDF URL, or a local PDF path:
 
 ```bash
-uv run replicate https://arxiv.org/abs/<id>      # arXiv (also fetches the HTML rendering when available)
-uv run replicate https://example.com/paper.pdf   # any direct PDF URL
-uv run replicate ./paper.pdf                     # a local PDF
+replicate https://arxiv.org/abs/<id>      # arXiv (also fetches the HTML rendering when available)
+replicate https://example.com/paper.pdf   # any direct PDF URL
+replicate ./paper.pdf                     # a local PDF
 ```
 
-With plain Python (after `pip install .`):
-
-```bash
-replicate https://arxiv.org/abs/<id>
-# or, without relying on the installed entry point:
-python -m replicator.cli https://arxiv.org/abs/<id>
-```
-
-Options (all forms):
+Options:
 
 ```
 --out DIR                output directory (default: replications/<arxiv-id> or replications/pdf-<hash>)
@@ -59,8 +42,8 @@ Options (all forms):
 Use `--instructions` to steer what the planner focuses on before it writes `PLAN.md`:
 
 ```bash
-uv run replicate https://arxiv.org/abs/1706.03762 --instructions "focus only on scaled dot-product attention, skip multi-head"
-uv run replicate https://arxiv.org/abs/1706.03762 --instructions ./my_notes.md
+replicate https://arxiv.org/abs/1706.03762 --instructions "focus only on scaled dot-product attention, skip multi-head"
+replicate https://arxiv.org/abs/1706.03762 --instructions ./my_notes.md
 ```
 
 The generated baseline lands in the output directory &mdash; a standalone repo with its own
