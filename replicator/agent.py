@@ -26,12 +26,8 @@ from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.tools import BaseTool, tool
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.errors import GraphRecursionError
-
-try:  # the in-memory checkpointer was renamed across langgraph versions
-    from langgraph.checkpoint.memory import InMemorySaver
-except ImportError:  # pragma: no cover
-    from langgraph.checkpoint.memory import MemorySaver as InMemorySaver
 
 from .paper import pdf_to_text
 from .phases import Phase
