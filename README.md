@@ -13,7 +13,24 @@ Requires Python ≥ 3.14.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install .
+pip install ".[anthropic]"   # default provider (Anthropic)
+```
+
+Provider integrations are optional extras &mdash; install only what you need:
+
+| Extra | Provider | Env var |
+|---|---|---|
+| `anthropic` | Anthropic (default) | `ANTHROPIC_API_KEY` |
+| `openai` | OpenAI / OpenAI-compatible local servers | `OPENAI_API_KEY` |
+| `google` | Google Gemini | `GOOGLE_API_KEY` |
+| `ollama` | Ollama | &mdash; |
+| `all` | All of the above | &mdash; |
+
+```bash
+pip install ".[openai]"
+pip install ".[google]"
+pip install ".[ollama]"
+pip install ".[all]"   # install every provider
 ```
 
 ## Usage
