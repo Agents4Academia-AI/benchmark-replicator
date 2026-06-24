@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-**Baseline Replicator** turns arXiv papers into clean, minimal baseline implementations via a deterministic pipeline of Claude Agent SDK sub-agents. State is shared only through files in the generated repo; the orchestrator controls flow—the model never auto-delegates.
+**Baseline Replicator** turns arXiv papers into clean, minimal baseline implementations via a deterministic pipeline of provider-agnostic LLM sub-agents (LangGraph + LangChain, driving any major provider or a local model). State is shared only through files in the generated repo; the orchestrator controls flow—the model never auto-delegates.
 
 ## Pipeline Phases
 
@@ -10,8 +10,9 @@
    the official code URL (or null). If official code is found, the planner briefly skims it
    online to ground hyperparameters and architecture details in the plan.
 2. **Human checkpoint**: User approves, rejects, or `[c]hat`s to revise `PLAN.md` before any
-   code is written. The chat opens the **Reviser** (opus): a stateful `ClaudeSDKClient`
-   conversation that edits `PLAN.md` / `.replicator/criteria.json` per the user's requests.
+   code is written. The chat opens the **Reviser** (opus): a stateful conversation (kept
+   across turns by a LangGraph checkpointer) that edits `PLAN.md` / `.replicator/criteria.json`
+   per the user's requests.
    After approval, the orchestrator shallow-clones the official repo (if any) into
    `.replicator/reference_code/` for downstream phases to read.
 3. **Coder** (opus): Implements the method from the plan, using `.replicator/reference_code/`
@@ -33,6 +34,7 @@ replicator/
 ├── cli.py          # Entry point: argument parsing, PDF download trigger
 ├── paper.py        # arXiv URL parsing, PDF download (stdlib only)
 ├── phases.py       # Phase dataclass, all phase definitions + tool sets
+├── agent.py        # Provider-agnostic backend: build models (init_chat_model), the 8 tools, run a phase
 ├── pipeline.py     # Orchestrator: runs phases in sequence, handles checkpoint, repair loop
 ├── verdict.py      # Verdict/Failure dataclasses, read/write verdict.json
 ├── criteria.py     # Machine-readable criteria.json/results.json: load, validate, compare
@@ -47,8 +49,12 @@ uv sync                                                        # install deps
 uv run replicate https://arxiv.org/abs/XXXX.XXXXX             # full pipeline (CPU mode)
 uv run replicate https://arxiv.org/abs/XXXX.XXXXX --gpu       # GPU mode (run from inside a GPU allocation)
 uv run replicate https://arxiv.org/abs/XXXX.XXXXX --out /tmp/test-baseline
-uv run replicate https://arxiv.org/abs/XXXX.XXXXX --model sonnet
+uv run replicate https://arxiv.org/abs/XXXX.XXXXX --provider openai           # OpenAI (OPENAI_API_KEY)
+uv run replicate https://arxiv.org/abs/XXXX.XXXXX --model anthropic:claude-sonnet-4-6   # force one model for every phase
+uv run replicate https://arxiv.org/abs/XXXX.XXXXX --provider openai --base-url http://localhost:8000/v1 --model openai:my-model   # local vLLM/llama.cpp
 ```
+
+**Model providers**: `--provider` (default `anthropic`; also `openai`, `google_genai`, `ollama`) picks the per-phase default models — each phase uses a *strong* or *cheap* tier (the opus/sonnet split above). `--model` overrides every phase with a single `provider:model` id. Reach OpenAI-compatible local servers (vLLM, llama.cpp) with `--provider openai --base-url …`, and ollama with `--provider ollama`. API keys come from the standard env vars (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`, …). Local models are **best-effort**: the long agentic phases need a strong tool-calling model (e.g. a large model served by vLLM); small models will likely struggle. Default ids and per-phase tiers live in `agent.py`.
 
 No formal test suite for the orchestrator. Verify changes by running the full pipeline on a small paper (e.g., `1905.13002`).
 
