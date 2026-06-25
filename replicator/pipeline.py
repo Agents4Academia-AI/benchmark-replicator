@@ -365,6 +365,7 @@ async def _checkpoint(
         plan_text = plan.read_text() if plan.exists() else "  (PLAN.md was not created!)"
         print(plan_text)
         print("─" * 70)
+        
         decisions = _decisions_needed(plan_text)
         if decisions:
             print("\n⚠️  Decisions needed before coding (resolve via [c]hat):")
@@ -377,9 +378,7 @@ async def _checkpoint(
         if choice in ("y", "yes"):
             return True
         if choice in ("c", "chat"):
-            usages.append(
-                await _run_chat_phase(REVISER, repo, _model(REVISER, model_override), hardware)
-            )
+            usages.append(await _run_chat_phase(REVISER, repo, _model(REVISER, model_override), hardware))
             continue
         return False
 
@@ -402,17 +401,13 @@ def _apply_mechanical_check(repo: Path, verdict: Verdict) -> Verdict:
         print(f"  · {line}")
     if not failures:
         return verdict
-    combined = list(verdict.failures) + [
-        f for f in failures if f not in verdict.failures
-    ]
+    combined = list(verdict.failures) + [f for f in failures if f not in verdict.failures]
     verdict = Verdict(phase=verdict.phase, status="fail", failures=combined)
     write_verdict(repo, verdict)
     return verdict
 
 
-async def _verify_and_repair(
-    repo: Path, model_override: str | None, hardware: str
-) -> tuple[bool, list[_PhaseUsage]]:
+async def _verify_and_repair(repo: Path, model_override: str | None, hardware: str) -> tuple[bool, list[_PhaseUsage]]:
     """Run the judging phases; on a failure verdict, repair and re-verify.
 
     Each round runs the tester then the benchmarker. They only diagnose — a failing
@@ -424,18 +419,31 @@ async def _verify_and_repair(
     attempts = 0
     usages: list[_PhaseUsage] = []
     reference = _reference_note(repo)
+    # On a repair round triggered by the benchmarker, the tester already passed and the
+    # repair targets a benchmark criterion — re-running the (slow) tester adds cost without
+    # new signal. Skip straight to the benchmarker in that case; a full tester+benchmarker
+    # pass is still required for SUCCESS, so the tester re-runs once the benchmarker is green.
+    skip_tester_once = False
     while True:
         failure: Verdict | None = None
-        for judge in (TESTER, BENCHMARKER):
+        judges = (BENCHMARKER,) if skip_tester_once else (TESTER, BENCHMARKER)
+        skip_tester_once = False
+        for judge in judges:
             clear_verdict(repo)
-            usages.append(await _run_phase(judge, repo, _model(judge, model_override), hardware, reference=reference))
+            usages.append(
+                await _run_phase(
+                    judge,
+                    repo,
+                    _model(judge, model_override),
+                    hardware,
+                    reference=reference,
+                )
+            )
             verdict = read_verdict(repo, judge.name)
             if judge is BENCHMARKER:
                 verdict = _apply_mechanical_check(repo, verdict)
             if not verdict.passed:
-                print(
-                    f"  ✗ {judge.name} verdict: FAIL ({len(verdict.failures)} issue(s))."
-                )
+                print(f"  ✗ {judge.name} verdict: FAIL ({len(verdict.failures)} issue(s)).")
                 failure = verdict
                 break  # Repair before running the next judge.
             print(f"  ✓ {judge.name} verdict: PASS.")
@@ -446,10 +454,11 @@ async def _verify_and_repair(
             return False, usages
 
         attempts += 1
-        print(
-            f"\n🔧 Repair attempt {attempts}/{_MAX_REPAIR_ATTEMPTS} "
-            f"(triggered by {failure.phase})."
-        )
+        # If the benchmarker triggered this repair, the tester was green and the fix targets
+        # a benchmark criterion — re-run only the benchmarker next round (the tester re-runs
+        # for the final clean pass once the benchmarker goes green).
+        skip_tester_once = failure.phase == "benchmarker"
+        print(f"\n🔧 Repair attempt {attempts}/{_MAX_REPAIR_ATTEMPTS} (triggered by {failure.phase}).")
         usages.append(
             await _run_phase(
                 REPAIR,
@@ -473,14 +482,10 @@ def _print_cost_summary(usages: list[_PhaseUsage]) -> None:
     print(f"\n{'─' * 62}")
     print("  Cost summary")
     print(f"{'─' * 62}")
-    print(
-        f"  {'Phase':<{w}}  {'Input tok':>10}  {'Output tok':>10}  {'Cost (USD)':>10}"
-    )
+    print(f"  {'Phase':<{w}}  {'Input tok':>10}  {'Output tok':>10}  {'Cost (USD)':>10}")
     print(f"  {'─' * (w)}  {'─' * 10}  {'─' * 10}  {'─' * 10}")
     for u in usages:
-        print(
-            f"  {u.label:<{w}}  {u.input_tokens:>10,}  {u.output_tokens:>10,}  ${u.cost_usd:>9.4f}"
-        )
+        print(f"  {u.label:<{w}}  {u.input_tokens:>10,}  {u.output_tokens:>10,}  ${u.cost_usd:>9.4f}")
     print(f"  {'─' * (w)}  {'─' * 10}  {'─' * 10}  {'─' * 10}")
     print(f"  {'TOTAL':<{w}}  {total_in:>10,}  {total_out:>10,}  ${total_cost:>9.4f}")
     print(f"{'─' * 62}")
@@ -525,9 +530,7 @@ def _parse_coder_phases(repo: Path) -> list[tuple[str, str]]:
     return parsed
 
 
-def _build_phase_instruction(
-    n: int, total: int, title: str, desc: str, *, is_final: bool
-) -> str:
+def _build_phase_instruction(n: int, total: int, title: str, desc: str, *, is_final: bool) -> str:
     """Build the per-phase task suffix injected into the coder's query prompt."""
     parts = [f"You are working on **Phase {n} of {total}: {title}**."]
     if desc:
@@ -592,8 +595,7 @@ async def run_pipeline(
     hardware = hardware_profile(gpu)
 
     instructions_block = (
-        "\n\nAdditional instructions from the user (treat as authoritative):\n"
-        + instructions.strip()
+        "\n\nAdditional instructions from the user (treat as authoritative):\n" + instructions.strip()
         if instructions.strip()
         else ""
     )
@@ -630,13 +632,14 @@ async def run_pipeline(
     for i, (phase_title, phase_desc) in enumerate(coder_phases):
         n, total = i + 1, len(coder_phases)
         is_final = i == total - 1
-        phase_instruction = _build_phase_instruction(
-            n, total, phase_title, phase_desc, is_final=is_final
-        )
+        phase_instruction = _build_phase_instruction(n, total, phase_title, phase_desc, is_final=is_final)
         label = "coder" if total == 1 else f"coder-{n}"
         all_usages.append(
             await _run_phase(
-                CODER, repo, _model(CODER, model_override), hardware,
+                CODER,
+                repo,
+                _model(CODER, model_override),
+                hardware,
                 label=label,
                 reference=reference,
                 phase_instruction=phase_instruction,
@@ -657,8 +660,6 @@ async def run_pipeline(
         _print_cost_summary(all_usages)
         sys.exit(1)
 
-    all_usages.append(
-        await _run_phase(CLEANER, repo, _model(CLEANER, model_override), hardware)
-    )
+    all_usages.append(await _run_phase(CLEANER, repo, _model(CLEANER, model_override), hardware))
     print(f"\n✅ Done. Replicated baseline is in {repo} (see README.md and REPORT.md).")
     _print_cost_summary(all_usages)

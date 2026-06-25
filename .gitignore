@@ -11,4 +11,5 @@ wheels/
 
 # Generated baseline repos
 replications/
+.replicator-web/
 .DS_Store

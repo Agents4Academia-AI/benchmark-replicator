@@ -31,6 +31,15 @@ With uv:
 uv run replicate https://arxiv.org/abs/<id>
 ```
 
+Local browser UI:
+
+```bash
+uv run replicator-web
+```
+
+Then open `http://127.0.0.1:8765`, submit a paper, review the plan checkpoint,
+and watch the pipeline run. See [docs/web_ui.md](docs/web_ui.md).
+
 The input can be an arXiv URL/id, a direct PDF URL, or a local PDF path:
 
 ```bash
@@ -53,6 +62,7 @@ Options (all forms):
 --out DIR                output directory (default: replications/<arxiv-id> or replications/pdf-<hash>)
 --model MODEL            override the model for all phases (default: opus for plan/code, sonnet otherwise)
 --instructions TEXT|FILE extra instructions for the planner: literal text or a path to a file
+--gpu                    GPU mode: ship paper-scale default config plus a reduced verification run
 --yes, -y                auto-approve the plan and run without stopping at the human checkpoint
 ```
 
@@ -92,10 +102,11 @@ CPU); the repo also ships a **fast test** config (seconds, used by pytest) and a
 A deterministic Python orchestrator (`replicator/pipeline.py`) runs a fixed
 sequence of scoped [Claude Agent
 SDK](https://github.com/anthropics/claude-agent-sdk-python) sub-agents &mdash;
-planner, coder, tester, benchmarker, repair, and cleaner &mdash; that share
-state through files in the generated repo. After planning, the pipeline **pauses
-for your approval** of `PLAN.md` before any code is written. Pass `--yes` to skip
-this checkpoint for unattended runs (e.g. batch jobs on an HPC cluster).
+planner, reviser, coder, tester, benchmarker, repair, and cleaner &mdash; that
+share state through files in the generated repo. After planning, the pipeline
+**pauses for your approval** of `PLAN.md` before any code is written. Pass
+`--yes` to skip this checkpoint for unattended runs (e.g. batch jobs on an HPC
+cluster).
 
 See **[docs/how_it_works.md](docs/how_it_works.md)** for the full pipeline, the
 verify-and-repair loop, and an annotated diagram.
@@ -105,9 +116,12 @@ verify-and-repair loop, and an annotated diagram.
 ```
 replicator/
 ├── cli.py        # argument parsing + entry point
-├── paper.py      # arXiv/PDF URL or local file → PDF (stdlib only)
-├── phases.py     # the five sub-agents: scope, tools, prompts, turn caps
+├── paper.py      # arXiv/PDF download, HTML fetch, text extraction (via pymupdf)
+├── phases.py     # seven sub-agent phase definitions: scope, tools, prompts, turn caps
 ├── pipeline.py   # orchestrator: runs phases, streams progress, planning checkpoint
+├── criteria.py   # machine-readable criteria.json / results.json: load, compare, fail
+├── verdict.py    # Verdict/Failure dataclasses; read/write verdict.json
+├── web.py        # local browser UI (replicator-web entry point)
 └── prompts/      # one system prompt per sub-agent
 ```
 
