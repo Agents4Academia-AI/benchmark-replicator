@@ -153,6 +153,10 @@ def make_tools(repo: Path) -> dict[str, BaseTool]:
     Keyed by the exact SDK tool names so ``phase.allowed_tools`` and the prompts work
     unchanged. Restricting a phase to a tool subset is just selecting from this dict.
     """
+    # Absolutize the repo root so search results render correctly even when the CLI
+    # passes a relative path (the default): a model-supplied absolute `path` yields
+    # absolute matches, and ``relative_to`` needs both sides to be absolute.
+    repo = repo.resolve()
 
     @tool("Read")
     def read_file(file_path: str) -> str:
