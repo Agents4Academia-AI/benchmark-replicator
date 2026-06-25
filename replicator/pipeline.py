@@ -322,13 +322,12 @@ def _decisions_needed(plan_text: str) -> str:
     surface paper/code or paper-internal contradictions at the human checkpoint so they
     are resolved before any code is written.
     """
-    import re
-
     m = re.search(
-        r"(?:^#+\s*Decisions needed|\*\*Decisions needed\*\*)\s*:?\s*\n(.*?)"
-        r"(?=\n#+\s|\n\*\*[A-Z]|\Z)",
+        r"(?:^#+\s*Decisions needed|^\s*(?:-\s*)?\*\*Decisions needed\*\*)"
+        r"\s*:?\s*(.*?)"
+        r"(?=\n#+\s|\n-\s*\*\*[A-Z]|\n\*\*[A-Z]|\Z)",
         plan_text,
-        re.IGNORECASE | re.DOTALL,
+        re.IGNORECASE | re.DOTALL | re.MULTILINE,
     )
     if not m:
         return ""
