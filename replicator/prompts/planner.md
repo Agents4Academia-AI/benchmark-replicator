@@ -46,7 +46,13 @@ qualitative findings at that scale.
    - If you find an official code repository, briefly skim it online (WebFetch one or two key
      source files) to ground key architecture choices, hyperparameters, and non-obvious
      implementation details in your plan. Keep this lightweight — a few minutes, not a deep
-     read. **Do not plan to copy the authors' code**; use it as a cross-check on your plan.
+     read. **Do not plan to copy the authors' code**; use it as a cross-check on your plan. While skimming, watch for two kinds of conflict and capture each in the **Decisions
+     needed** section (see Output): (1) the **paper contradicts itself** — it states a rule,
+     hyperparameter, or procedure two different ways in different sections; (2) the **official
+     code contradicts the paper text** — the code does something the paper explicitly states
+     differently. Note that a detail present *only* in the code (the code augments a silent or
+     loose paper) is **not** a conflict — fold those into the plan directly as "follow the
+     reference code", no decision needed.
    - Write `.replicator/artifacts.json` recording the cloneable git URL under `"code_url"`
      (or `null` if no official code was found). The orchestrator uses this to make the
      reference available on disk for the coder and later phases.
@@ -95,12 +101,24 @@ Write `PLAN.md` in the repo root, `.replicator/criteria.json`, and `.replicator/
   scale and method invariants. Each must be objectively pass/fail. Criteria may reference
   the paper's reported qualitative finding within a stated tolerance; they should not require
   full paper-scale reproduction.
+  When an official implementation exists (`artifacts.json` `code_url` is non-null), include one
+  criterion of the form "core method's outputs agree with the authors' reference implementation
+  on small shared inputs" — exact agreement where the algorithm is deterministic, or
+  distributional/aggregate agreement where it consumes randomness. Property invariants alone
+  (shapes, sums-to-one, sign of an update) do not catch a method that is internally consistent
+  but diverges from the reference; an output-agreement check does.
 - **Path to paper-scale experiments**: concretely, what a researcher changes (config knobs,
   data, hardware, expected cost) to push toward full paper results. This is documentation,
   not something the pipeline runs.
 - **Gap to paper**: what the generated repo will *not* reproduce (experiments, datasets,
   benchmarks, or claims left out of scope).
-- **Risks / open questions**: anything genuinely ambiguous in the paper.
+- **Decisions needed**: a short list of conflicts a human should resolve *before* coding —
+  each either a paper self-contradiction or a paper-vs-official-code contradiction (per step 2).
+  For each: state both concrete options, name where each comes from (paper section / code file),
+  give your **recommended default**, and phrase it as a yes/no or A/B choice. Omit the section
+  (write "None") if there are no genuine contradictions — do not pad it with mere ambiguities.
+  Details the code adds to a silent paper do **not** belong here; follow the code for those.
+- **Risks / open questions**: anything else genuinely ambiguous in the paper that is not a clear-cut decision for the human.
 - **Implementation phases**: break the implementation into 2–4 sequential phases. Unlike
   the sections above, render this as its own top-level `## Implementation Phases` heading
   (an H2 section, *not* a `- **...**:` bullet), and write each phase as a `### Phase N: <title>`

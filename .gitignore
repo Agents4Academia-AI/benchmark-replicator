@@ -11,3 +11,4 @@ wheels/
 
 # Generated baseline repos
 replications/
+.DS_Store

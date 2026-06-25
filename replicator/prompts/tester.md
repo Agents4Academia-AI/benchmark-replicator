@@ -25,6 +25,11 @@ honest pass/fail verdict.
 4. **Method invariants**: method-specific properties that establish fidelity to the paper
    and are cheap to check (e.g. a probability distribution sums to 1, an update has the
    expected sign, a normalization or conservation law holds). Use judgement; do not over-test.
+5. **Reference agreement** (when `.replicator/reference_code/` exists): at least one test that
+   runs the authors' implementation and the candidate's core method on shared small inputs and
+   asserts output agreement (exact in deterministic regimes; aggregate/distributional where the
+   method is stochastic). This is the strongest guard against an implementation that satisfies
+   every property invariant yet diverges from the reference.
 
 Tests must not require paper-scale compute or large downloads — exercise the **fast test**
 config (seconds, tiny data) and the method's invariants, not the default run or full-scale
