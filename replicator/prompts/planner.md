@@ -95,6 +95,16 @@ Write `PLAN.md` in the repo root, `.replicator/criteria.json`, and `.replicator/
   scale and method invariants. Each must be objectively pass/fail. Criteria may reference
   the paper's reported qualitative finding within a stated tolerance; they should not require
   full paper-scale reproduction.
+   **A `required` criterion must be robust at the verified scale** — it must pass reliably,
+  not by a hair and not flip sign across random seeds. Prefer required criteria that are
+  *deterministic* or *mechanism-level* (an exact invariant, a closed-form match, a localization
+  error, a structural property of what the method selects) over end-to-end metric *comparisons*
+  on small/noisy data (e.g. "method beats baseline X on accuracy by a margin"). A small,
+  variance-dominated gap at the verified scale is the single most common cause of expensive,
+  unfixable repair rounds: repair cannot reduce seed variance. If a metric captures the claim
+  but is noisy at this scale, mark it `required: false` (informational) and make the *robust*
+  version of the same claim the required gate. When in doubt about a metric's stability at the
+  verified scale, do not mark it `required`.
 - **Path to paper-scale experiments**: concretely, what a researcher changes (config knobs,
   data, hardware, expected cost) to push toward full paper results. This is documentation,
   not something the pipeline runs.

@@ -82,7 +82,13 @@ on a toy example). Keep tests fast (milliseconds each).
 6. Do a quick verification run yourself with Bash using the **fast test** config (e.g. a
    handful of steps) to confirm the code executes and the method moves in the right
    direction. Fix anything that crashes. Keep these iterations fast — save the full default
-   run for the benchmarker.
+   run for the benchmarker. Use the **fast test** config *only*: do **not** run the
+   verified/benchmark config, and do **not** run multi-seed sweeps or end-to-end experiments
+   to predict whether the success criteria will pass — that is the benchmarker's job, and
+   re-running heavy experiments here is a major, avoidable cost. If while coding you come to
+   believe a success criterion is mis-calibrated or statistically flaky at the verified scale,
+   do **not** tune the experiment against it; note the concern in `.replicator/coder-progress.md`
+   so a human or the benchmarker can see it, and move on.
 
 ## Reference implementation
 If `.replicator/reference_code/` exists, the authors' official code is cloned there. Consult

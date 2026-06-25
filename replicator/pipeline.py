@@ -388,9 +388,16 @@ async def _verify_and_repair(repo: Path, model_override: str | None, hardware: s
     attempts = 0
     usages: list[_PhaseUsage] = []
     reference = _reference_note(repo)
+    # On a repair round triggered by the benchmarker, the tester already passed and the
+    # repair targets a benchmark criterion — re-running the (slow) tester adds cost without
+    # new signal. Skip straight to the benchmarker in that case; a full tester+benchmarker
+    # pass is still required for SUCCESS, so the tester re-runs once the benchmarker is green.
+    skip_tester_once = False
     while True:
         failure: Verdict | None = None
-        for judge in (TESTER, BENCHMARKER):
+        judges = (BENCHMARKER,) if skip_tester_once else (TESTER, BENCHMARKER)
+        skip_tester_once = False
+        for judge in judges:
             clear_verdict(repo)
             usages.append(
                 await _run_phase(
@@ -416,6 +423,10 @@ async def _verify_and_repair(repo: Path, model_override: str | None, hardware: s
             return False, usages
 
         attempts += 1
+        # If the benchmarker triggered this repair, the tester was green and the fix targets
+        # a benchmark criterion — re-run only the benchmarker next round (the tester re-runs
+        # for the final clean pass once the benchmarker goes green).
+        skip_tester_once = failure.phase == "benchmarker"
         print(f"\n🔧 Repair attempt {attempts}/{_MAX_REPAIR_ATTEMPTS} (triggered by {failure.phase}).")
         usages.append(
             await _run_phase(
