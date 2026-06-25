@@ -11,6 +11,7 @@ dependencies = [
 
 [project.scripts]
 replicate = "replicator.cli:main"
+replicator-web = "replicator.web:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -18,3 +19,16 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["replicator"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.19",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]  # long lines in embedded HTML/CSS/JS strings are acceptable

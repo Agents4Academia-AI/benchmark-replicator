@@ -31,15 +31,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "url",
-        help="arXiv URL/id, a direct PDF URL, or a local PDF path "
-        "(e.g. https://arxiv.org/abs/1706.03762).",
+        help="arXiv URL/id, a direct PDF URL, or a local PDF path (e.g. https://arxiv.org/abs/1706.03762).",
     )
     parser.add_argument(
         "--out",
         type=Path,
         default=None,
-        help="Output directory for the generated repo "
-        "(default: replications/<arxiv-id> or replications/pdf-<hash>).",
+        help="Output directory for the generated repo (default: replications/<arxiv-id> or replications/pdf-<hash>).",
     )
     parser.add_argument(
         "--model",
@@ -101,17 +99,9 @@ def main(argv: list[str] | None = None) -> None:
         pdf_path = download_pdf(arxiv_id, repo / "paper")
         print(f"PDF:   {pdf_path}")
         html_path = download_html(arxiv_id, repo / "paper")
-        print(
-            f"HTML:  {html_path}"
-            if html_path
-            else "HTML:  (none — planner will read the PDF)"
-        )
+        print(f"HTML:  {html_path}" if html_path else "HTML:  (none — planner will read the PDF)")
         txt_path = extract_pdf_text(pdf_path)
-        print(
-            f"Text:  {txt_path}"
-            if txt_path
-            else "Text:  (none — planner will read the PDF)"
-        )
+        print(f"Text:  {txt_path}" if txt_path else "Text:  (none — planner will read the PDF)")
         link = f"https://arxiv.org/abs/{arxiv_id}"
     else:
         repo = args.out or (Path("replications") / repo_name_for_source(source))
@@ -125,20 +115,14 @@ def main(argv: list[str] | None = None) -> None:
             pdf_path = download_pdf_from_url(source, repo / "paper")
         print(f"PDF:   {pdf_path}")
         txt_path = extract_pdf_text(pdf_path)
-        print(
-            f"Text:  {txt_path}"
-            if txt_path
-            else "Text:  (none — planner will read the PDF)"
-        )
+        print(f"Text:  {txt_path}" if txt_path else "Text:  (none — planner will read the PDF)")
         link = source
 
     (repo / "paper" / "SOURCE.txt").write_text(link + "\n")
 
     instructions = _resolve_instructions(args.instructions)
     if instructions:
-        print(
-            f"Instructions: {instructions[:80]}{'…' if len(instructions) > 80 else ''}"
-        )
+        print(f"Instructions: {instructions[:80]}{'…' if len(instructions) > 80 else ''}")
     if args.gpu:
         print("Mode:  GPU (full + verification configs)")
     if args.yes:
