@@ -11,7 +11,5 @@ wheels/
 
 # Generated baseline repos
 replications/
-
-# Local web UI job state
 .replicator-web/
 .DS_Store

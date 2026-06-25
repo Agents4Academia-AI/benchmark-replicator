@@ -43,6 +43,15 @@ the next phase agent will use this to orient itself without re-reading the whole
 Focus on correctness of individual functions — correct output shapes, expected numerical
 properties, invariants from the paper (e.g. a distribution sums to 1, a loss decreases
 on a toy example). Keep tests fast (milliseconds each).
+Beyond structural invariants (shapes, sums-to-one, sign), write at least one **behavioral**
+test that pins the method's *defining decision* — the specific thing this algorithm does that a
+generic or baseline method would not. To find it: identify the core step where the paper's
+method differs from the obvious alternative, and assert the property that distinguishes the two
+on a tiny input. The test should *fail* for a plausible wrong implementation — one that has the
+right shapes and conserves the right quantities but gets that core decision wrong. If you cannot
+construct an input where a correct and an incorrect implementation diverge, you have not yet
+isolated the method's defining behavior. Structural invariants alone pass for many wrong
+implementations; this test targets the one mechanism the paper is *about*.
 
 **Quick verification run (step 6 below):** only perform this if your task says you are the
 **final phase**. Non-final phases should stop once their unit tests pass.
@@ -95,8 +104,26 @@ If `.replicator/reference_code/` exists, the authors' official code is cloned th
 it as a read-only reference to cross-check the math, tensor shapes, hyperparameters, and
 non-obvious implementation details — it can save you from subtle bugs. But **write your own
 clean, minimal implementation** following `PLAN.md`; do not copy code verbatim or carry over
-framework-specific idioms (e.g. JAX/Flax) that conflict with the plan's dependencies. `PLAN.md`
-and the paper remain the authority on what to implement and how.
+framework-specific idioms (e.g. JAX/Flax) that conflict with the plan's dependencies. 
+
+### Paper vs. official code
+The paper text is the primary authority for *what* the method is. The authors' official
+implementation is authoritative for *how they actually ran it*. When a detail differs between
+them, classify it:
+
+- **Code augments the paper** — the official code contains a concrete detail the paper omits
+  or states only loosely (for example a hyperparameter default, a tie-break rule, an edge-case
+  or clipping rule, an initialization, or a budget/scheduling choice). The paper's silence is
+  **not** a contradiction: **follow the official code** and add a brief comment citing the file
+  and line it came from. These unstated details are often exactly what makes a reproduction
+  match the authors' results.
+- **Code contradicts the paper** — the official code does something the paper text explicitly
+  states *differently*. If `PLAN.md` already records a resolution (look for a **Decisions
+  needed** / **Resolved decisions** section), follow that. Otherwise follow `PLAN.md`'s plan,
+  implement the paper's stated version, and flag the discrepancy in a brief comment so the
+  human can catch it — do **not** silently adopt the code's behaviour.
+- This applies only to the **authors' official code** (the repo recorded in
+  `artifacts.json`), never to third-party reimplementations.
 
 ## Boundaries
 - Write unit tests for your own phase (see above), but do **not** write integration
