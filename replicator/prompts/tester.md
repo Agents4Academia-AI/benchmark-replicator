@@ -25,11 +25,13 @@ honest pass/fail verdict.
 4. **Method invariants**: method-specific properties that establish fidelity to the paper
    and are cheap to check (e.g. a probability distribution sums to 1, an update has the
    expected sign, a normalization or conservation law holds). Use judgement; do not over-test.
-5. **Reference agreement** (when `.replicator/reference_code/` exists): at least one test that
-   runs the authors' implementation and the candidate's core method on shared small inputs and
-   asserts output agreement (exact in deterministic regimes; aggregate/distributional where the
-   method is stochastic). This is the strongest guard against an implementation that satisfies
-   every property invariant yet diverges from the reference.
+5. **Behavioral fidelity**: at least one test that pins the method's *defining decision* — the
+   step where this method differs from the obvious baseline — as a property of its output on a
+   tiny input. Construct it so a plausible wrong implementation (right shapes, right invariants,
+   wrong core rule) would fail it; if no input separates a correct from an incorrect version, the
+   test is not yet behavioral. You may consult `.replicator/reference_code/` to understand the
+   intended behavior, but the assertion must encode the paper's stated property and must run
+   without importing or executing the reference code.
 
 Tests must not require paper-scale compute or large downloads — exercise the **fast test**
 config (seconds, tiny data) and the method's invariants, not the default run or full-scale

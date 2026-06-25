@@ -101,12 +101,11 @@ Write `PLAN.md` in the repo root, `.replicator/criteria.json`, and `.replicator/
   scale and method invariants. Each must be objectively pass/fail. Criteria may reference
   the paper's reported qualitative finding within a stated tolerance; they should not require
   full paper-scale reproduction.
-  When an official implementation exists (`artifacts.json` `code_url` is non-null), include one
-  criterion of the form "core method's outputs agree with the authors' reference implementation
-  on small shared inputs" — exact agreement where the algorithm is deterministic, or
-  distributional/aggregate agreement where it consumes randomness. Property invariants alone
-  (shapes, sums-to-one, sign of an update) do not catch a method that is internally consistent
-  but diverges from the reference; an output-agreement check does.
+  Include at least one **behavioral** success criterion that captures the method's *defining
+  decision* — the step where this algorithm provably differs from the obvious baseline — phrased
+  so an implementation that gets that step wrong fails it, even if its shapes and invariants are
+  correct. Derive it from what the paper claims the algorithm *produces*, not from generic
+  properties (shapes, sums-to-one) that hold for many methods including wrong ones.
 - **Path to paper-scale experiments**: concretely, what a researcher changes (config knobs,
   data, hardware, expected cost) to push toward full paper results. This is documentation,
   not something the pipeline runs.
