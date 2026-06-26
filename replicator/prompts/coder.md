@@ -52,6 +52,13 @@ right shapes and conserves the right quantities but gets that core decision wron
 construct an input where a correct and an incorrect implementation diverge, you have not yet
 isolated the method's defining behavior. Structural invariants alone pass for many wrong
 implementations; this test targets the one mechanism the paper is *about*.
+Test the algorithm's **boundary inputs**, not just typical ones: the smallest and largest
+values each numeric argument can take, the degenerate structural cases (e.g., an empty or singleton input), and the minimum value of any batch/parallelism
+parameter. The method's **hard invariants** — the contracts that must hold for *every* input,
+such as never producing more outputs than requested, and respecting stated bounds — must be asserted *at these boundaries*, because that is
+where they break. A bound that holds at the typical scale often fails at the extremes (an
+off-by-one, a split that rounds the
+wrong way). These are the cheapest bugs to catch and the most common to miss.
 
 **Quick verification run (step 6 below):** only perform this if your task says you are the
 **final phase**. Non-final phases should stop once their unit tests pass.

@@ -32,6 +32,13 @@ honest pass/fail verdict.
    test is not yet behavioral. You may consult `.replicator/reference_code/` to understand the
    intended behavior, but the assertion must encode the paper's stated property and must run
    without importing or executing the reference code.
+   Exercise the **boundaries** of every numeric and structural argument, not only typical
+   values: the smallest input (e.g. a count of 1), an input that meets or exceeds the
+   available pool/data, the degenerate single-element or single-group case, and the minimum
+   of any batch/parallelism parameter. Assert the method's hard invariants (output count ≤
+   what was requested, stated bounds respected)
+   *at these boundaries* — boundary violations are the most common silent bug and the cheapest
+   to test.
 
 Tests must not require paper-scale compute or large downloads — exercise the **fast test**
 config (seconds, tiny data) and the method's invariants, not the default run or full-scale

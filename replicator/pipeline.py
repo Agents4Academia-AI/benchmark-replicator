@@ -365,15 +365,13 @@ async def _checkpoint(
         plan_text = plan.read_text() if plan.exists() else "  (PLAN.md was not created!)"
         print(plan_text)
         print("─" * 70)
-        
+
         decisions = _decisions_needed(plan_text)
         if decisions:
             print("\n⚠️  Decisions needed before coding (resolve via [c]hat):")
             print(decisions)
             print("─" * 70)
-        answer = input(
-            "Approve plan and continue? [y]es / [N]o / [c]hat to revise PLAN.md: "
-        )
+        answer = input("Approve plan and continue? [y]es / [N]o / [c]hat to revise PLAN.md: ")
         choice = answer.strip().lower()
         if choice in ("y", "yes"):
             return True
