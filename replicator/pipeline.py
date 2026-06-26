@@ -331,6 +331,28 @@ def _reference_note(repo: Path) -> str:
     return ""
 
 
+def _decisions_needed(plan_text: str) -> str:
+    """Extract the body of PLAN.md's '## Decisions needed' / '**Decisions needed**' section.
+
+    Returns the section text (stripped) or "" if absent or explicitly "None". Used to
+    surface paper/code or paper-internal contradictions at the human checkpoint so they
+    are resolved before any code is written.
+    """
+    m = re.search(
+        r"(?:^#+\s*Decisions needed|^\s*(?:-\s*)?\*\*Decisions needed\*\*)"
+        r"\s*:?\s*(.*?)"
+        r"(?=\n#+\s|\n-\s*\*\*[A-Z]|\n\*\*[A-Z]|\Z)",
+        plan_text,
+        re.IGNORECASE | re.DOTALL | re.MULTILINE,
+    )
+    if not m:
+        return ""
+    body = m.group(1).strip()
+    if body.lower() in ("none", "none.", "n/a", ""):
+        return ""
+    return body
+
+
 async def _checkpoint(
     repo: Path,
     model_override: str | None,
@@ -356,8 +378,15 @@ async def _checkpoint(
         return True
     while True:
         print(f"\n{'─' * 70}\n📋  PLAN.md (review before implementation)\n{'─' * 70}")
-        print(plan.read_text() if plan.exists() else "  (PLAN.md was not created!)")
+        plan_text = plan.read_text() if plan.exists() else "  (PLAN.md was not created!)"
+        print(plan_text)
         print("─" * 70)
+
+        decisions = _decisions_needed(plan_text)
+        if decisions:
+            print("\n⚠️  Decisions needed before coding (resolve via [c]hat):")
+            print(decisions)
+            print("─" * 70)
         answer = input("Approve plan and continue? [y]es / [N]o / [c]hat to revise PLAN.md: ")
         choice = answer.strip().lower()
         if choice in ("y", "yes"):
@@ -404,9 +433,16 @@ async def _verify_and_repair(repo: Path, model_override: str | None, hardware: s
     attempts = 0
     usages: list[_PhaseUsage] = []
     reference = _reference_note(repo)
+    # On a repair round triggered by the benchmarker, the tester already passed and the
+    # repair targets a benchmark criterion — re-running the (slow) tester adds cost without
+    # new signal. Skip straight to the benchmarker in that case; a full tester+benchmarker
+    # pass is still required for SUCCESS, so the tester re-runs once the benchmarker is green.
+    skip_tester_once = False
     while True:
         failure: Verdict | None = None
-        for judge in (TESTER, BENCHMARKER):
+        judges = (BENCHMARKER,) if skip_tester_once else (TESTER, BENCHMARKER)
+        skip_tester_once = False
+        for judge in judges:
             clear_verdict(repo)
             usages.append(
                 await _run_phase(
@@ -432,6 +468,10 @@ async def _verify_and_repair(repo: Path, model_override: str | None, hardware: s
             return False, usages
 
         attempts += 1
+        # If the benchmarker triggered this repair, the tester was green and the fix targets
+        # a benchmark criterion — re-run only the benchmarker next round (the tester re-runs
+        # for the final clean pass once the benchmarker goes green).
+        skip_tester_once = failure.phase == "benchmarker"
         print(f"\n🔧 Repair attempt {attempts}/{_MAX_REPAIR_ATTEMPTS} (triggered by {failure.phase}).")
         usages.append(
             await _run_phase(
