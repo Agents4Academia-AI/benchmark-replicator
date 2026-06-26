@@ -21,6 +21,7 @@ from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
     ClaudeSDKClient,
+    HookMatcher,
     ResultMessage,
     TextBlock,
     ToolUseBlock,
@@ -28,6 +29,7 @@ from claude_agent_sdk import (
 )
 
 from .criteria import mechanical_failures
+from .sandbox import make_repo_guard
 from .paper import clone_reference_code
 from .phases import (
     BENCHMARKER,
@@ -88,6 +90,18 @@ def _short(text: str, limit: int = 500) -> str:
     return text if len(text) <= limit else text[:limit] + " […]"
 
 
+def _repo_hooks(repo: Path) -> dict:
+    """PreToolUse hooks confining a phase to its own replication directory.
+
+    ``cwd`` is not a sandbox — a phase can still read/write/rm an absolute path
+    anywhere. This guard (enforced by the harness, not just the prompt) denies any
+    Read/Write/Edit/Glob/Grep/Bash call whose target escapes ``repo``, so a phase
+    can never wander into a sibling replication under a shared ``replications/`` parent.
+    """
+    guard = make_repo_guard(repo)
+    return {"PreToolUse": [HookMatcher(matcher=None, hooks=[guard])]}
+
+
 async def _run_phase(
     phase: Phase,
     repo: Path,
@@ -117,6 +131,7 @@ async def _run_phase(
         permission_mode=phase.permission_mode,
         max_turns=phase.max_turns,
         model=model,
+        hooks=_repo_hooks(repo),
     )
     task = phase.task.format(**task_kwargs)
     usage = _PhaseUsage(label=label)
@@ -192,6 +207,7 @@ async def _run_chat_phase(phase: Phase, repo: Path, model: str, hardware: str) -
         permission_mode=phase.permission_mode,
         max_turns=phase.max_turns,
         model=model,
+        hooks=_repo_hooks(repo),
     )
     # First message tells the agent where the paper lives, like the planner is told.
     first_prefix = (
