@@ -9,41 +9,27 @@ build on, plus the experiments to reproduce the paper's key results.
 
 ## Installation
 
-Requires Python ≥ 3.14.
+Requires Python ≥ 3.10.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install ".[anthropic]"   # default provider (Anthropic)
+pip install ".[anthropic]"   # see below for other choices of providers
 ```
 
-Provider integrations are optional extras &mdash; install only what you need:
+We offer different choices for LLM providers:
 
 | Extra | Provider | Env var |
 |---|---|---|
-| `anthropic` | Anthropic (default) | `ANTHROPIC_API_KEY` |
+| `anthropic` | Anthropic | `ANTHROPIC_API_KEY` |
 | `openai` | OpenAI / OpenAI-compatible local servers | `OPENAI_API_KEY` |
 | `google` | Google Gemini | `GOOGLE_API_KEY` |
-| `ollama` | Ollama | &mdash; |
+| `ollama` | Ollama (and other local providers) | &mdash; |
 | `all` | All of the above | &mdash; |
-
-```bash
-pip install ".[openai]"
-pip install ".[google]"
-pip install ".[ollama]"
-pip install ".[all]"   # install every provider
-```
 
 ## Usage
 
 ```bash
-replicate https://arxiv.org/abs/<id>
-```
-
-The input can be an arXiv URL/id, a direct PDF URL, or a local PDF path:
-
-```bash
-replicate https://arxiv.org/abs/<id>      # arXiv (also fetches the HTML rendering when available)
-replicate https://example.com/paper.pdf   # any direct PDF URL
+replicate https://example.com/paper.pdf   # any PDF URL, or
 replicate ./paper.pdf                     # a local PDF
 ```
 

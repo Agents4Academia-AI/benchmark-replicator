@@ -8,6 +8,14 @@ wheels/
 
 # Virtual environments
 .venv
+uv.lock
 
 # Generated baseline repos
 replications/
+
+# macOS
+.DS_Store
+
+# Agents
+AGENTS.md
+CLAUDE.md
