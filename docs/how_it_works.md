@@ -20,14 +20,16 @@ repo (`PLAN.md`, the source code, `criteria.json`, `results.json`, `REPORT.md`).
                                           ▼
                             ╔═══════════════════════════════╗
             paper.pdf ─────▶║     ① PLANNER     (opus)      ║─────▶ PLAN.md
-            paper.html ────▶║  picks CPU-feasible experiment║       + criteria.json
-                            ╚═══════════════════════════════╝
+            paper.html ────▶║   most informative experiment ║       + criteria.json
+            paper.txt ─────▶║   within budget (CPU or --gpu)║       + artifacts.json
+                            ╚═══════════════════════════════╝       (official code URL)
                                           │
                                           ▼
                             ┌─────────────────────────────────────┐
                             │   👤 HUMAN CHECKPOINT                │
                             │   review PLAN.md                     │
                             │   [y]es / [N]o / [c]hat to revise    │
+                            │   (--yes auto-approves, no prompt)  │
                             └─────────────────────────────────────┘
                                │ y         │ c            │ N
                                │           ▼              └────────▶ exit(0)
@@ -39,11 +41,28 @@ repo (`PLAN.md`, the source code, `criteria.json`, `results.json`, `REPORT.md`).
                                │           │
                                │◀──────────┘ (loop back to checkpoint)
                                ▼
-                            ╔═══════════════════════════════╗
-                  PLAN.md ─▶║     ③ CODER     (opus)        ║─────▶ src/
-                            ║  implements method; entry     ║       + results.json
-                            ║  point writes results.json    ║
-                            ╚═══════════════════════════════╝
+                            ┌─────────────────────────────────────────┐
+                            │  ORCHESTRATOR clones official code repo,│
+                            │  if artifacts.json gave a URL →         │
+                            │  .replicator/reference_code/ (read-only)│
+                            └─────────────────────────────────────────┘
+                                          │
+                                          ▼
+        ╭───────────────────────────────────────────────────────────────────────╮
+        │  ③ CODER  (opus):  N sequential phases parsed from PLAN.md  (max 4)   │
+        │                                                                       │
+        │   for each Phase n of N (from the plan's Implementation Phases):      │
+        │     ╔════════════════════════════╗                                    │
+        │     ║   ③ CODER  (opus)           ║  implements that phase's scope    │
+        │     ║   Phase n of N              ║  (reads reference_code/ when the  │
+        │     ╚════════════════════════════╝   official repo was cloned)        │
+        │              │                                                        │
+        │     n < N ───┤   ast syntax-check, then run the next phase (loop up)  │
+        │              │                                                        │
+        │     n = N ───┴─▶ final phase wires entry point, writes results.json   │
+        ╰─────────────────────────────────┬─────────────────────────────────────╯
+                                          ▼
+                            src/   +   .replicator/results.json
                                           │
         ╭───────────────────────────────────────────────────────────────────────
         │  ④ VERIFY-AND-REPAIR LOOP            (max 2 repair attempts)          │
