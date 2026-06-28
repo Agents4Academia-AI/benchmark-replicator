@@ -574,16 +574,24 @@ def _syntax_check(repo: Path) -> None:
 
     Parses each file in-process with ``ast.parse`` (non-mutating — no ``__pycache__``
     artifacts, and no dependency on a ``python`` executable being on ``PATH``; the
-    pipeline runs under ``uv``). Skips ``.replicator/`` (the vendored reference clone and
-    logs) and ``__pycache__`` so it only ever flags files the coder actually wrote.
+    pipeline runs under ``uv``). Skips ``__pycache__`` and any hidden directory
+    (``.replicator/`` reference clone and logs, the ``.venv/`` the coder may create,
+    ``.git/`` …) so it only ever flags files the coder actually wrote, and reports —
+    rather than aborting on — a file that is not valid UTF-8 (e.g. a vendored test
+    fixture with a ``big5`` coding declaration).
     """
     errs = []
     for f in repo.rglob("*.py"):
         rel = f.relative_to(repo)
-        if ".replicator" in rel.parts or "__pycache__" in rel.parts:
+        if "__pycache__" in rel.parts or any(p.startswith(".") for p in rel.parts):
             continue
         try:
-            ast.parse(f.read_text(encoding="utf-8"), filename=str(rel))
+            src = f.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError) as exc:
+            errs.append(f"{rel}: {exc}")
+            continue
+        try:
+            ast.parse(src, filename=str(rel))
         except SyntaxError as exc:
             errs.append(f"{rel}: {exc}")
     if errs:
