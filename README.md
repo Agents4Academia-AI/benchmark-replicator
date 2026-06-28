@@ -26,6 +26,8 @@ We offer different choices for LLM providers:
 | `ollama` | Ollama (and other local providers) | &mdash; |
 | `all` | All of the above | &mdash; |
 
+> **Claude subscription users:** if you'd rather use your Claude monthly plan instead of an API key, check out the [`claude-sdk` branch](../../tree/claude-sdk).
+
 ## Usage
 
 ```bash
