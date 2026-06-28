@@ -1,7 +1,12 @@
 [project]
 name = "baseline-replicator"
 version = "0.1.0"
-description = "Turn an arXiv paper or any PDF into a clean, minimal, CPU-runnable baseline implementation using scoped, provider-agnostic LLM sub-agents."
+description = "Turn an arXiv paper or any PDF into a clean, minimal, modular implementation using scoped, provider-agnostic LLM sub-agents."
+authors = [
+    { name = "Sahel Iqbal", email = "sahel13miqbal@proton.me" },
+    { name = "Arya Akhavan", email = "aryaakhavanf@gmail.com" },
+    { name = "Olga Isupova", email = "ihoho89@gmail.com" },
+]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
