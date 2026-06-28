@@ -21,6 +21,7 @@ from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
     ClaudeSDKClient,
+    HookMatcher,
     ResultMessage,
     TextBlock,
     ToolUseBlock,
@@ -40,6 +41,7 @@ from .phases import (
     Phase,
     hardware_profile,
 )
+from .sandbox import make_repo_guard
 from .verdict import (
     VERDICT_PATH,
     Verdict,
@@ -88,6 +90,19 @@ def _short(text: str, limit: int = 500) -> str:
     return text if len(text) <= limit else text[:limit] + " […]"
 
 
+def _repo_hooks(repo: Path) -> dict:
+    """PreToolUse hooks that keep a phase pointed at its own replication directory.
+
+    ``cwd`` is not a sandbox — a phase can still read/write/rm an absolute path
+    anywhere. This guard denies any Read/Write/Edit/Glob/Grep/Bash call whose target is
+    an out-of-repo absolute path, so a phase does not accidentally wander into a sibling
+    replication under a shared ``replications/`` parent. It is best-effort (it string-scans
+    Bash, so e.g. a path opened inside ``python -c`` can still escape) — see ``sandbox``.
+    """
+    guard = make_repo_guard(repo)
+    return {"PreToolUse": [HookMatcher(matcher=None, hooks=[guard])]}
+
+
 async def _run_phase(
     phase: Phase,
     repo: Path,
@@ -117,6 +132,7 @@ async def _run_phase(
         permission_mode=phase.permission_mode,
         max_turns=phase.max_turns,
         model=model,
+        hooks=_repo_hooks(repo),
     )
     task = phase.task.format(**task_kwargs)
     usage = _PhaseUsage(label=label)
@@ -192,6 +208,7 @@ async def _run_chat_phase(phase: Phase, repo: Path, model: str, hardware: str) -
         permission_mode=phase.permission_mode,
         max_turns=phase.max_turns,
         model=model,
+        hooks=_repo_hooks(repo),
     )
     # First message tells the agent where the paper lives, like the planner is told.
     first_prefix = (
@@ -315,6 +332,28 @@ def _reference_note(repo: Path) -> str:
     return ""
 
 
+def _decisions_needed(plan_text: str) -> str:
+    """Extract the body of PLAN.md's '## Decisions needed' / '**Decisions needed**' section.
+
+    Returns the section text (stripped) or "" if absent or explicitly "None". Used to
+    surface paper/code or paper-internal contradictions at the human checkpoint so they
+    are resolved before any code is written.
+    """
+    m = re.search(
+        r"(?:^#+\s*Decisions needed|^\s*(?:-\s*)?\*\*Decisions needed\*\*)"
+        r"\s*:?\s*(.*?)"
+        r"(?=\n#+\s|\n-\s*\*\*[A-Z]|\n\*\*[A-Z]|\Z)",
+        plan_text,
+        re.IGNORECASE | re.DOTALL | re.MULTILINE,
+    )
+    if not m:
+        return ""
+    body = m.group(1).strip()
+    if body.lower() in ("none", "none.", "n/a", ""):
+        return ""
+    return body
+
+
 async def _checkpoint(
     repo: Path,
     model_override: str | None,
@@ -340,8 +379,15 @@ async def _checkpoint(
         return True
     while True:
         print(f"\n{'─' * 70}\n📋  PLAN.md (review before implementation)\n{'─' * 70}")
-        print(plan.read_text() if plan.exists() else "  (PLAN.md was not created!)")
+        plan_text = plan.read_text() if plan.exists() else "  (PLAN.md was not created!)"
+        print(plan_text)
         print("─" * 70)
+
+        decisions = _decisions_needed(plan_text)
+        if decisions:
+            print("\n⚠️  Decisions needed before coding (resolve via [c]hat):")
+            print(decisions)
+            print("─" * 70)
         answer = input("Approve plan and continue? [y]es / [N]o / [c]hat to revise PLAN.md: ")
         choice = answer.strip().lower()
         if choice in ("y", "yes"):
@@ -388,9 +434,19 @@ async def _verify_and_repair(repo: Path, model_override: str | None, hardware: s
     attempts = 0
     usages: list[_PhaseUsage] = []
     reference = _reference_note(repo)
+    # On a repair round triggered by the benchmarker, the tester already passed and the
+    # repair targets a benchmark criterion — re-running the (slow) tester before the
+    # benchmarker is green adds cost without new signal. So defer it: run the benchmarker
+    # first and re-run the tester only after the benchmarker passes. A full tester+benchmarker
+    # pass is still required for SUCCESS — the loop breaks on the first failing judge, so the
+    # deferred tester runs (confirming the fix didn't break tests) exactly when the benchmarker
+    # is green, and is skipped while the benchmarker is still red.
+    defer_tester = False
     while True:
         failure: Verdict | None = None
-        for judge in (TESTER, BENCHMARKER):
+        judges = (BENCHMARKER, TESTER) if defer_tester else (TESTER, BENCHMARKER)
+        defer_tester = False
+        for judge in judges:
             clear_verdict(repo)
             usages.append(
                 await _run_phase(
@@ -416,6 +472,11 @@ async def _verify_and_repair(repo: Path, model_override: str | None, hardware: s
             return False, usages
 
         attempts += 1
+        # If the benchmarker triggered this repair, the tester was green and the fix targets
+        # a benchmark criterion — next round run the benchmarker first and defer the tester
+        # behind it, so the slow tester re-runs (confirming the fix didn't break it) only once
+        # the benchmarker goes green.
+        defer_tester = failure.phase == "benchmarker"
         print(f"\n🔧 Repair attempt {attempts}/{_MAX_REPAIR_ATTEMPTS} (triggered by {failure.phase}).")
         usages.append(
             await _run_phase(

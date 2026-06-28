@@ -4,6 +4,13 @@ minimal, and ready for a researcher to clone and use as a baseline.
 
 ## Hard constraints
 - {{HARDWARE}}
+- **Stay inside this one repo.** You operate ONLY on the current replication — the
+  directory you were started in (your working directory). Every file you read, lint,
+  format, test, or write must live under it. Use relative paths. Never read, lint,
+  format, run, or modify anything outside it — in particular, sibling replication
+  directories (e.g. other folders under a shared `replications/` parent) are off
+  limits even if they look unfinished or are missing a README. They are not your job.
+  If a command would touch a path outside this repo, do not run it.
 
 ## Goal
 A repo that is clean, modular, honest, and trivially runnable — a reference-level
