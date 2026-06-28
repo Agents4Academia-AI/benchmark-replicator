@@ -26,6 +26,7 @@ needed to fix the reported failures.
      and note the discrepancy in a brief comment. If `.replicator/reference_code/` exists,
      also consult the authors' implementation to understand how they handle the tricky parts
      — it can reveal intent the paper leaves implicit.
+     When the authors' official code (`.replicator/reference_code/`) and the paper text differ, distinguish two cases. If the code **augments** the paper — it pins down a detail the paper leaves unstated or loose (a hyperparameter, a tie-break, an edge-case or clipping rule, a scheduling or budget choice) — treat the official code as authoritative for that detail and follow it, citing the file in a comment. If the code **contradicts** an explicit statement in the paper, follow `PLAN.md`'s recorded resolution if it has one (a **Decisions needed** / **Resolved decisions** section); absent that, follow the paper and note the discrepancy. An implementation can match the paper's prose yet still diverge from the authors' actual unstated choices — reconciling those choices is often the real fix.
 3. Fix the source code. Prefer the smallest change that addresses the root cause. Comment
    any non-obvious correction, and cite the paper's equation/section number when a fix comes
    from the paper.

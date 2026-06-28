@@ -31,6 +31,7 @@ from langgraph.errors import GraphRecursionError
 
 from .paper import pdf_to_text
 from .phases import Phase
+from .sandbox import bash_escape
 
 _LOG_DIR_NAME = ".replicator/logs"
 
@@ -229,6 +230,13 @@ def make_tools(repo: Path) -> dict[str, BaseTool]:
 
         `timeout` is in seconds — raise it for long training/benchmark runs.
         """
+        escapee = bash_escape(repo, command)
+        if escapee:
+            return (
+                f"Error: command references '{escapee}', which is outside this replication's "
+                f"directory ({repo}). Use relative paths and stay inside your own repo; "
+                "never read, lint, run, or modify a sibling replication."
+            )
         effective = min(timeout, _BASH_MAX_TIMEOUT)
         try:
             proc = subprocess.run(

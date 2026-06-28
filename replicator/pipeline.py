@@ -125,6 +125,38 @@ def _reference_note(repo: Path) -> str:
     return ""
 
 
+def _decisions_needed(plan_text: str) -> str:
+    """Extract the body of PLAN.md's '## Decisions needed' / '**Decisions needed**' section.
+
+    Returns the section text (stripped) or "" if absent or explicitly "None". Used to
+    surface paper/code or paper-internal contradictions at the human checkpoint so they
+    are resolved before any code is written.
+    """
+    # The body ends at the next section. "Decisions needed" is always followed by
+    # "Risks / open questions" and then the `## Implementation Phases` H2, so we stop at
+    # a Risks bullet/heading or any markdown heading — *not* at the next bold bullet,
+    # since the planner often renders each decision as its own `- **Name**:` bullet and a
+    # generic `\n-\s*\*\*[A-Z]` terminator would drop every decision after the first.
+    # ``[ \t]*`` (not ``\s*``) after the header keeps the trailing whitespace from eating
+    # the newline, so an empty section terminates immediately instead of swallowing Risks.
+    m = re.search(
+        r"(?:^#+[ \t]*Decisions needed|^[ \t]*(?:-[ \t]*)?\*\*Decisions needed\*\*)"
+        r"[ \t]*:?[ \t]*(.*?)"
+        r"(?=\n#+\s|\n[ \t]*-?[ \t]*\*\*Risks|\Z)",
+        plan_text,
+        re.IGNORECASE | re.DOTALL | re.MULTILINE,
+    )
+    if not m:
+        return ""
+    body = m.group(1).strip()
+    # Treat an explicit "None"/"N/A" (however elaborated, e.g. "None found.",
+    # "None — paper and code agree.") as no decisions, so the checkpoint banner only
+    # fires on real contradictions.
+    if re.match(r"\s*(?:none|n/?a)\b", body, re.IGNORECASE):
+        return ""
+    return body
+
+
 async def _checkpoint(
     repo: Path,
     provider: str,
@@ -152,8 +184,14 @@ async def _checkpoint(
         return True
     while True:
         print(f"\n{'─' * 70}\n📋  PLAN.md (review before implementation)\n{'─' * 70}")
-        print(plan.read_text() if plan.exists() else "  (PLAN.md was not created!)")
+        plan_text = plan.read_text() if plan.exists() else "  (PLAN.md was not created!)"
+        print(plan_text)
         print("─" * 70)
+        decisions = _decisions_needed(plan_text)
+        if decisions:
+            print("\n⚠️  Decisions needed before coding (resolve via [c]hat):")
+            print(decisions)
+            print("─" * 70)
         answer = input(
             "Approve plan and continue? [y]es / [N]o / [c]hat to revise PLAN.md: "
         )
@@ -215,9 +253,19 @@ async def _verify_and_repair(
     attempts = 0
     usages: list[PhaseUsage] = []
     reference = _reference_note(repo)
+    # On a repair round triggered by the benchmarker, the tester already passed and the
+    # repair targets a benchmark criterion — re-running the (slow) tester before the
+    # benchmarker is green adds cost without new signal. So defer it: run the benchmarker
+    # first and re-run the tester only after the benchmarker passes. A full tester+benchmarker
+    # pass is still required for SUCCESS — the loop breaks on the first failing judge, so the
+    # deferred tester runs (confirming the fix didn't break tests) exactly when the benchmarker
+    # is green, and is skipped while the benchmarker is still red.
+    defer_tester = False
     while True:
         failure: Verdict | None = None
-        for judge in (TESTER, BENCHMARKER):
+        judges = (BENCHMARKER, TESTER) if defer_tester else (TESTER, BENCHMARKER)
+        defer_tester = False
+        for judge in judges:
             clear_verdict(repo)
             usages.append(
                 await run_agent(
@@ -242,6 +290,11 @@ async def _verify_and_repair(
             return False, usages
 
         attempts += 1
+        # If the benchmarker triggered this repair, the tester was green and the fix targets
+        # a benchmark criterion — next round run the benchmarker first and defer the tester
+        # behind it, so the slow tester re-runs (confirming the fix didn't break it) only once
+        # the benchmarker goes green.
+        defer_tester = failure.phase == "benchmarker"
         print(
             f"\n🔧 Repair attempt {attempts}/{_MAX_REPAIR_ATTEMPTS} "
             f"(triggered by {failure.phase})."

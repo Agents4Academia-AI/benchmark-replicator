@@ -38,6 +38,7 @@ replicator/
 ├── pipeline.py     # Orchestrator: runs phases in sequence, handles checkpoint, repair loop
 ├── verdict.py      # Verdict/Failure dataclasses, read/write verdict.json
 ├── criteria.py     # Machine-readable criteria.json/results.json: load, validate, compare
+├── sandbox.py      # Best-effort guard: refuse Bash commands that reference out-of-repo paths
 ├── __init__.py
 └── prompts/        # System prompts for each phase (planner/reviser/coder/tester/benchmarker/repair/cleaner).md
 ```

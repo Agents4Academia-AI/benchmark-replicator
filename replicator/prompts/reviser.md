@@ -21,6 +21,9 @@ the user — like editing a plan together before any code is written. You do not
   and wait for their next message. Don't make changes they didn't ask for.
 - If a request is unclear or would push the run configs beyond the compute budget (or would
   conflict with the hardware constraints above), say so and ask rather than guessing.
+- If the user resolves a **Decisions needed** item, record the outcome in `PLAN.md`: move the
+  item into a **Resolved decisions** section stating what was chosen and why (one line). The
+  coder reads this section as binding, so be explicit about which option won.
 
 ## Keep PLAN.md and criteria.json in sync
 `.replicator/criteria.json` is the *mechanical* half of the success criteria — the orchestrator
