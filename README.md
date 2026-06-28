@@ -40,6 +40,7 @@ Options:
 --model MODEL            override the model for all phases (default: opus for plan/code, sonnet otherwise)
 --instructions TEXT|FILE extra instructions for the planner: literal text or a path to a file
 --yes, -y                auto-approve the plan and run without stopping at the human checkpoint
+--gpu                    GPU mode: ships ambitious paper-scale parameters; must be run inside a GPU allocation
 ```
 
 Use `--instructions` to steer what the planner focuses on before it writes `PLAN.md`:
@@ -69,6 +70,10 @@ CPU); the repo also ships a **fast test** config (seconds, used by pytest) and a
 - ✅ Ships three config tiers: a **fast test** config (seconds, for pytest), the **default**
   config (the real experiment, run by the pipeline), and an optional **scale-up** config
   (documentation only, for paper-scale runs that may need a GPU).
+- ✅ With `--gpu` (run from inside a GPU allocation, e.g. `srun --gpus=1 --pty bash`): the
+  default config ships ambitious paper-matching parameters; the pipeline verifies via a reduced
+  `--quick` run (tens of minutes to ~1 hour); the generated repo also includes a `run_full.sbatch`
+  Slurm template for submitting the full paper-scale run.
 - ✅ Produces tests, an honest benchmark `REPORT.md`, and a `README.md` in the generated repo.
 - ❌ Does **not** promise full paper-scale reproduction, exact table numbers, or GPU-scale
   training by default.
@@ -88,19 +93,6 @@ batch jobs on an HPC cluster).
 
 See **[docs/how_it_works.md](docs/how_it_works.md)** for the full pipeline, the
 verify-and-repair loop, and an annotated diagram.
-
-## Layout
-
-```
-replicator/
-├── cli.py        # argument parsing + entry point
-├── paper.py      # arXiv/PDF URL or local file → PDF (stdlib only)
-├── phases.py     # the sub-agents: scope, tools, prompts, turn caps
-├── agent.py      # provider-agnostic backend: models, tools, run a phase
-├── pipeline.py   # orchestrator: runs phases, streams progress, planning checkpoint
-└── prompts/      # one system prompt per sub-agent
-```
-
 
 ---
 
