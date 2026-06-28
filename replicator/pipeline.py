@@ -29,7 +29,6 @@ from claude_agent_sdk import (
 )
 
 from .criteria import mechanical_failures
-from .sandbox import make_repo_guard
 from .paper import clone_reference_code
 from .phases import (
     BENCHMARKER,
@@ -42,6 +41,7 @@ from .phases import (
     Phase,
     hardware_profile,
 )
+from .sandbox import make_repo_guard
 from .verdict import (
     VERDICT_PATH,
     Verdict,
@@ -91,12 +91,13 @@ def _short(text: str, limit: int = 500) -> str:
 
 
 def _repo_hooks(repo: Path) -> dict:
-    """PreToolUse hooks confining a phase to its own replication directory.
+    """PreToolUse hooks that keep a phase pointed at its own replication directory.
 
     ``cwd`` is not a sandbox — a phase can still read/write/rm an absolute path
-    anywhere. This guard (enforced by the harness, not just the prompt) denies any
-    Read/Write/Edit/Glob/Grep/Bash call whose target escapes ``repo``, so a phase
-    can never wander into a sibling replication under a shared ``replications/`` parent.
+    anywhere. This guard denies any Read/Write/Edit/Glob/Grep/Bash call whose target is
+    an out-of-repo absolute path, so a phase does not accidentally wander into a sibling
+    replication under a shared ``replications/`` parent. It is best-effort (it string-scans
+    Bash, so e.g. a path opened inside ``python -c`` can still escape) — see ``sandbox``.
     """
     guard = make_repo_guard(repo)
     return {"PreToolUse": [HookMatcher(matcher=None, hooks=[guard])]}
@@ -434,14 +435,17 @@ async def _verify_and_repair(repo: Path, model_override: str | None, hardware: s
     usages: list[_PhaseUsage] = []
     reference = _reference_note(repo)
     # On a repair round triggered by the benchmarker, the tester already passed and the
-    # repair targets a benchmark criterion — re-running the (slow) tester adds cost without
-    # new signal. Skip straight to the benchmarker in that case; a full tester+benchmarker
-    # pass is still required for SUCCESS, so the tester re-runs once the benchmarker is green.
-    skip_tester_once = False
+    # repair targets a benchmark criterion — re-running the (slow) tester before the
+    # benchmarker is green adds cost without new signal. So defer it: run the benchmarker
+    # first and re-run the tester only after the benchmarker passes. A full tester+benchmarker
+    # pass is still required for SUCCESS — the loop breaks on the first failing judge, so the
+    # deferred tester runs (confirming the fix didn't break tests) exactly when the benchmarker
+    # is green, and is skipped while the benchmarker is still red.
+    defer_tester = False
     while True:
         failure: Verdict | None = None
-        judges = (BENCHMARKER,) if skip_tester_once else (TESTER, BENCHMARKER)
-        skip_tester_once = False
+        judges = (BENCHMARKER, TESTER) if defer_tester else (TESTER, BENCHMARKER)
+        defer_tester = False
         for judge in judges:
             clear_verdict(repo)
             usages.append(
@@ -469,9 +473,10 @@ async def _verify_and_repair(repo: Path, model_override: str | None, hardware: s
 
         attempts += 1
         # If the benchmarker triggered this repair, the tester was green and the fix targets
-        # a benchmark criterion — re-run only the benchmarker next round (the tester re-runs
-        # for the final clean pass once the benchmarker goes green).
-        skip_tester_once = failure.phase == "benchmarker"
+        # a benchmark criterion — next round run the benchmarker first and defer the tester
+        # behind it, so the slow tester re-runs (confirming the fix didn't break it) only once
+        # the benchmarker goes green.
+        defer_tester = failure.phase == "benchmarker"
         print(f"\n🔧 Repair attempt {attempts}/{_MAX_REPAIR_ATTEMPTS} (triggered by {failure.phase}).")
         usages.append(
             await _run_phase(

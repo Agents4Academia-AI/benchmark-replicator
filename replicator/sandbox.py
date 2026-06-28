@@ -1,4 +1,4 @@
-"""A PreToolUse guard that confines every phase to its own replication directory.
+"""A PreToolUse guard that keeps each phase pointed at its own replication directory.
 
 ``cwd`` tells the SDK where shell commands start, but it is not a boundary: a phase
 can still read, write, or ``rm`` an absolute path anywhere on disk. That is exactly
@@ -6,10 +6,15 @@ how a cleaner run on one replication once wandered into a *sibling* replication 
 the shared ``replications/`` parent and started re-linting and re-testing it.
 
 This module builds a ``PreToolUse`` hook that denies any tool call whose target path
-escapes the repo root. It is enforced by the harness, not merely requested in a prompt,
-so it holds even if a phase's instructions don't. File-path tools (Read/Write/Edit/
-Glob/Grep) are checked by their path argument; Bash commands are scanned for absolute
-paths that point outside the repo.
+escapes the repo root. File-path tools (Read/Write/Edit/Glob/Grep) are checked by their
+path argument; Bash commands are scanned for *absolute* paths that point outside the repo.
+
+It is a best-effort guard against the common accidental case — a phase naming an
+out-of-repo absolute path, or a ``..`` that climbs out of the repo — not a security
+sandbox. Because it only string-scans the command, it does not stop every escape: a path
+opened inside a spawned interpreter (``python -c '...'``) or a bare ``cd`` to ``$HOME``
+leaves nothing for the regex to catch. Treat it as a guardrail that complements the
+prompts, not a process boundary.
 """
 
 from __future__ import annotations
@@ -28,27 +33,55 @@ def _resolve(root: Path, raw: str) -> Path:
     return p.resolve()
 
 
-def _inside(root: Path, target: Path) -> bool:
-    """True if ``target`` is ``root`` itself or lives under it."""
-    return target == root or root in target.parents
-
-
 # Absolute paths embedded in a shell command: POSIX ``/foo/bar`` and ``~/foo``.
-# Deliberately conservative — we only flag *absolute* paths, since relative paths in a
-# command run from ``cwd`` (the repo) and stay inside it by construction.
-_ABS_PATH = re.compile(r"(?<![\w])(~/[^\s'\"`;|&)]+|/[^\s'\"`;|&)]{2,})")
+# We flag *absolute* paths here; relative ``..`` traversal is handled separately below.
+# The ``.`` in the lookbehind keeps a repo-local ``./run.sh`` (or ``../x``) from being
+# read as the absolute path ``/run.sh`` — only a ``/`` that truly starts a path (preceded
+# by a space, ``=``, quote, …) is matched.
+_ABS_PATH = re.compile(r"(?<![\w.])(~/[^\s'\"`;|&)]+|/[^\s'\"`;|&)]{2,})")
+
+# Remote URLs embed a ``//host/path`` that ``_ABS_PATH`` would otherwise read as an
+# absolute ``/host/path`` and wrongly deny (a ``git clone https://…`` or ``pip install
+# <url>`` is not a filesystem path). Strip them before scanning. ``file://`` is left in
+# on purpose, so a ``file:///some/sibling`` path is still checked.
+_REMOTE_URL = re.compile(r"\b(?:https?|ftps?|git|ssh|rsync|scp)://[^\s'\"`;|&)]+", re.IGNORECASE)
+
+# Out-of-repo paths a phase legitimately references and the guard should not flag:
+# system tooling/libraries named by absolute path (interpreters, coreutils, Homebrew
+# under ``/opt`` on macOS) and the scratch/cache roots phases write to (``/tmp``,
+# ``/var/tmp``, ``~/.cache``). The trailing slashes keep ``/lib/`` from matching
+# ``/library-data``. Anything else outside the repo is denied.
+_ALLOWED_OUTSIDE = ("/usr/", "/bin/", "/lib/", "/opt/", "/System/", "/Library/", "/tmp/", "/var/", "~/.cache/")
+
+# A whitespace/operator-delimited operand, used to spot ``..`` traversal. Each operand is
+# also split on ``=`` so a path tucked into ``--out=../x`` is inspected.
+_TOKEN = re.compile(r"[^\s'\"`;|&()<>]+")
+
+
+def _path_tokens(command: str):
+    """Yield candidate path operands from ``command`` (splitting ``flag=value`` pairs)."""
+    for raw in _TOKEN.findall(command):
+        yield from raw.split("=")
 
 
 def _bash_escapes(root: Path, command: str) -> str | None:
-    """Return the first absolute path in ``command`` that escapes ``root``, or None."""
+    """Return the first path in ``command`` that escapes ``root``, or None.
+
+    Two best-effort checks: an absolute or ``~`` path pointing outside the repo, and
+    relative ``..`` traversal (``cd ..``, ``find ..``, ``rm -rf ../sibling``) that resolves
+    outside it. A repo-local ``./x`` or bare relative path stays inside ``root`` by
+    construction and is left alone.
+    """
+    command = _REMOTE_URL.sub(" ", command)
     for match in _ABS_PATH.findall(command):
-        # Skip the obvious system read-only paths a phase legitimately touches
-        # (interpreters, coreutils); they are not replication directories.
-        if match.startswith(("/usr/", "/bin/", "/opt/", "/etc/", "/lib", "/System/", "/Library/")):
+        if match.startswith(_ALLOWED_OUTSIDE):
             continue
-        target = _resolve(root, match)
-        if not _inside(root, target):
+        if not _resolve(root, match).is_relative_to(root):
             return match
+    for token in _path_tokens(command):
+        if ".." in token.split("/") and not token.startswith(_ALLOWED_OUTSIDE):
+            if not _resolve(root, token).is_relative_to(root):
+                return token
     return None
 
 
@@ -80,7 +113,7 @@ def make_repo_guard(repo: Path) -> Callable[[Any, str | None, Any], Awaitable[di
             raw = args.get(key)
             if isinstance(raw, str) and raw.strip():
                 target = _resolve(root, raw)
-                if not _inside(root, target):
+                if not target.is_relative_to(root):
                     return _deny(
                         f"Path '{raw}' is outside this replication's directory ({root}). "
                         "Phases must operate only on their own repo; sibling replications are off limits."
