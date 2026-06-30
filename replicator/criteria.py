@@ -113,9 +113,7 @@ def evaluate(criteria: list[Criterion], results: dict) -> list[CriterionResult]:
     for c in criteria:
         if c.id not in results:
             out.append(
-                CriterionResult(
-                    c, None, False, f"results.json has no value for id {c.id!r}"
-                )
+                CriterionResult(c, None, False, f"results.json has no value for id {c.id!r}")
             )
             continue
         value = results[c.id]
@@ -126,8 +124,7 @@ def evaluate(criteria: list[Criterion], results: dict) -> list[CriterionResult]:
                         c,
                         value,
                         False,
-                        f"measured {value!r} is not a boolean value like threshold "
-                        f"{c.threshold!r}",
+                        f"measured {value!r} is not a boolean value like threshold {c.threshold!r}",
                     )
                 )
                 continue
@@ -137,8 +134,7 @@ def evaluate(criteria: list[Criterion], results: dict) -> list[CriterionResult]:
                     c,
                     value,
                     False,
-                    f"measured {value!r} is not a numeric value like threshold "
-                    f"{c.threshold!r}",
+                    f"measured {value!r} is not a numeric value like threshold {c.threshold!r}",
                 )
             )
             continue

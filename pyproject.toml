@@ -1,5 +1,5 @@
 [project]
-name = "baseline-replicator"
+name = "benchmark-replicator"
 version = "0.1.0"
 description = "Turn an arXiv paper or any PDF into a clean, minimal, modular implementation using scoped, provider-agnostic LLM sub-agents."
 authors = [
@@ -9,6 +9,16 @@ authors = [
 ]
 readme = "README.md"
 requires-python = ">=3.10"
+license = { file = "LICENSE" }
+keywords = [
+    "llm",
+    "agents",
+    "research",
+    "reproducibility",
+    "arxiv",
+    "paper",
+    "code-generation",
+]
 dependencies = [
     "langgraph>=1.0",
     "langchain>=1.0",
@@ -30,6 +40,15 @@ all = [
     "langchain-google-genai>=2.0",
     "langchain-ollama>=0.2",
 ]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[project.urls]
+Homepage = "https://github.com/Agents4Academia-AI/benchmark-replicator"
+Repository = "https://github.com/Agents4Academia-AI/benchmark-replicator"
+Issues = "https://github.com/Agents4Academia-AI/benchmark-replicator/issues"
 
 [project.scripts]
 replicate = "replicator.cli:main"
@@ -40,3 +59,15 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["replicator"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP"]
+
+# The formatter wraps code at line-length (100); let E501 only flag lines that
+# can't be wrapped (long string literals / docstrings) past a looser bound.
+[tool.ruff.lint.pycodestyle]
+max-line-length = 120

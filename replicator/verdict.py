@@ -55,11 +55,7 @@ def read_verdict(repo: Path, expected_phase: str) -> Verdict:
         return Verdict(
             phase=expected_phase,
             status="fail",
-            failures=[
-                Failure(
-                    criterion="malformed verdict", detail=detail, evidence=VERDICT_PATH
-                )
-            ],
+            failures=[Failure(criterion="malformed verdict", detail=detail, evidence=VERDICT_PATH)],
         )
 
     try:
@@ -83,9 +79,7 @@ def read_verdict(repo: Path, expected_phase: str) -> Verdict:
     ]
     phase = str(data.get("phase", "")).strip().lower()
     if phase != expected_phase:
-        return malformed(
-            f"verdict phase {phase!r} does not match the {expected_phase} judge."
-        )
+        return malformed(f"verdict phase {phase!r} does not match the {expected_phase} judge.")
     status = str(data.get("status", "")).strip().lower()
     if status not in ("pass", "fail"):
         return malformed(f"verdict status {status!r} is not 'pass' or 'fail'.")

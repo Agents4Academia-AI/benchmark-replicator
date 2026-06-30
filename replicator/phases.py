@@ -88,9 +88,7 @@ class Phase:
         """
         text = (_PROMPTS_DIR / f"{self.name}.md").read_text()
         if "{{HARDWARE}}" not in text:
-            raise ValueError(
-                f"prompt {self.name}.md is missing the {{{{HARDWARE}}}} sentinel"
-            )
+            raise ValueError(f"prompt {self.name}.md is missing the {{{{HARDWARE}}}} sentinel")
         return text.replace("{{HARDWARE}}", hardware)
 
 

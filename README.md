@@ -1,5 +1,9 @@
 # Benchmark Replicator
 
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
+[![Python ≥3.10](https://img.shields.io/badge/python-%E2%89%A53.10-blue.svg)](https://www.python.org/downloads/)
+[![CI](https://github.com/Agents4Academia-AI/benchmark-replicator/actions/workflows/ci.yml/badge.svg)](https://github.com/Agents4Academia-AI/benchmark-replicator/actions/workflows/ci.yml)
+
 Ever opened a paper's codebase to use, extend, or compare against, and given up
 because of how rough, undocumented, or bitrotted it is?
 
@@ -9,14 +13,15 @@ build on, plus the experiments to reproduce the paper's key results.
 
 ## Installation
 
-Requires Python ≥ 3.10.
+Requires Python ≥ 3.10. Install straight from GitHub into a fresh virtual
+environment:
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install ".[anthropic]"   # see below for other choices of providers
+pip install "benchmark-replicator[anthropic] @ git+https://github.com/Agents4Academia-AI/benchmark-replicator.git"
 ```
 
-We offer different choices for LLM providers:
+Swap `anthropic` for whichever provider you want to use:
 
 | Extra | Provider | Env var |
 |---|---|---|
@@ -25,6 +30,15 @@ We offer different choices for LLM providers:
 | `google` | Google Gemini | `GOOGLE_API_KEY` |
 | `ollama` | Ollama (and other local providers) | &mdash; |
 | `all` | All of the above | &mdash; |
+
+Then set the API key for your provider (a local Ollama model needs none):
+
+```bash
+export ANTHROPIC_API_KEY=...   # or OPENAI_API_KEY / GOOGLE_API_KEY
+```
+
+> **Want to hack on the replicator itself?** Clone it and install in editable
+> mode instead &mdash; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 > **Claude subscription users:** if you'd rather use your Claude monthly plan instead of an API key, check out the [`claude-sdk` branch](../../tree/claude-sdk).
 
@@ -52,6 +66,13 @@ replicate https://arxiv.org/abs/1706.03762 --instructions "focus only on scaled 
 replicate https://arxiv.org/abs/1706.03762 --instructions ./my_notes.md
 ```
 
+> **What to expect:** a full run drives several LLM phases &mdash; a strong model
+> for planning and coding, a cheaper one for the rest &mdash; so a single paper
+> takes from tens of minutes to about an hour and, on a hosted provider, costs a
+> few dollars in API usage. Point `--provider` at a local model (Ollama / vLLM)
+> to avoid API cost. The pipeline pauses for your approval of `PLAN.md` before it
+> writes any code, so you can stop early if the plan looks wrong.
+
 The generated baseline lands in the output directory &mdash; a standalone repo
 with its own `README.md`, `PLAN.md`, `REPORT.md`, source, and tests. The
 pipeline runs the **default** config (the real experiment within budget, roughly
@@ -73,6 +94,19 @@ runs (e.g. batch jobs on an HPC cluster).
 
 See **[docs/how_it_works.md](docs/how_it_works.md)** for the full pipeline, the
 verify-and-repair loop, and an annotated diagram.
+
+## Contributing
+
+Contributions are welcome &mdash; bug reports, provider integrations, prompt
+improvements, and docs. See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the dev
+setup, how to run the checks, and the PR process, and
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community expectations.
+
+## License
+
+[AGPL-3.0](LICENSE). In short: it's free and open for everyone, and if you
+distribute a modified version &mdash; including running it as a network service
+&mdash; you must share your changes under the same license.
 
 ---
 

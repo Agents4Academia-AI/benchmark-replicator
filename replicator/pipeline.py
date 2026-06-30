@@ -45,6 +45,7 @@ _MAX_REPAIR_ATTEMPTS = 2
 # runaway plan (or an over-eager human edit at the checkpoint) must not multiply cost.
 _MAX_CODER_PHASES = 4
 
+
 def _paper_pdf(repo: Path) -> str:
     """Path to the downloaded paper PDF, relative to the repo (for the repair task)."""
     pdfs = sorted((repo / "paper").glob("*.pdf"))
@@ -192,9 +193,7 @@ async def _checkpoint(
             print("\n⚠️  Decisions needed before coding (resolve via [c]hat):")
             print(decisions)
             print("─" * 70)
-        answer = input(
-            "Approve plan and continue? [y]es / [N]o / [c]hat to revise PLAN.md: "
-        )
+        answer = input("Approve plan and continue? [y]es / [N]o / [c]hat to revise PLAN.md: ")
         choice = answer.strip().lower()
         if choice in ("y", "yes"):
             return True
@@ -231,9 +230,7 @@ def _apply_mechanical_check(repo: Path, verdict: Verdict) -> Verdict:
         print(f"  · {line}")
     if not failures:
         return verdict
-    combined = list(verdict.failures) + [
-        f for f in failures if f not in verdict.failures
-    ]
+    combined = list(verdict.failures) + [f for f in failures if f not in verdict.failures]
     verdict = Verdict(phase=verdict.phase, status="fail", failures=combined)
     write_verdict(repo, verdict)
     return verdict
@@ -269,7 +266,11 @@ async def _verify_and_repair(
             clear_verdict(repo)
             usages.append(
                 await run_agent(
-                    judge, repo, _model(judge, provider, model_override), hardware, base_url,
+                    judge,
+                    repo,
+                    _model(judge, provider, model_override),
+                    hardware,
+                    base_url,
                     reference=reference,
                 )
             )
@@ -277,9 +278,7 @@ async def _verify_and_repair(
             if judge is BENCHMARKER:
                 verdict = _apply_mechanical_check(repo, verdict)
             if not verdict.passed:
-                print(
-                    f"  ✗ {judge.name} verdict: FAIL ({len(verdict.failures)} issue(s))."
-                )
+                print(f"  ✗ {judge.name} verdict: FAIL ({len(verdict.failures)} issue(s)).")
                 failure = verdict
                 break  # Repair before running the next judge.
             print(f"  ✓ {judge.name} verdict: PASS.")
@@ -296,8 +295,7 @@ async def _verify_and_repair(
         # the benchmarker goes green.
         defer_tester = failure.phase == "benchmarker"
         print(
-            f"\n🔧 Repair attempt {attempts}/{_MAX_REPAIR_ATTEMPTS} "
-            f"(triggered by {failure.phase})."
+            f"\n🔧 Repair attempt {attempts}/{_MAX_REPAIR_ATTEMPTS} (triggered by {failure.phase})."
         )
         usages.append(
             await run_agent(
@@ -329,9 +327,7 @@ def _print_cost_summary(usages: list[PhaseUsage]) -> None:
     print(f"\n{'─' * 62}")
     print("  Cost summary")
     print(f"{'─' * 62}")
-    print(
-        f"  {'Phase':<{w}}  {'Input tok':>10}  {'Output tok':>10}  {'Cost (USD)':>10}"
-    )
+    print(f"  {'Phase':<{w}}  {'Input tok':>10}  {'Output tok':>10}  {'Cost (USD)':>10}")
     print(f"  {'─' * (w)}  {'─' * 10}  {'─' * 10}  {'─' * 10}")
     for u in usages:
         print(
@@ -381,9 +377,7 @@ def _parse_coder_phases(repo: Path) -> list[tuple[str, str]]:
     return parsed
 
 
-def _build_phase_instruction(
-    n: int, total: int, title: str, desc: str, *, is_final: bool
-) -> str:
+def _build_phase_instruction(n: int, total: int, title: str, desc: str, *, is_final: bool) -> str:
     """Build the per-phase task suffix injected into the coder's query prompt."""
     parts = [f"You are working on **Phase {n} of {total}: {title}**."]
     if desc:
@@ -493,7 +487,9 @@ async def run_pipeline(
     reference = _reference_note(repo)
     coder_phases = _parse_coder_phases(repo)
     if len(coder_phases) == 1 and coder_phases[0][0] == "Full implementation":
-        print("Coder: no Implementation Phases section found in PLAN.md — running a single coder phase.")
+        print(
+            "Coder: no Implementation Phases section found in PLAN.md — running a single coder phase."
+        )
     else:
         print(f"Coder: {len(coder_phases)} implementation phase(s) parsed from PLAN.md.")
     for i, (phase_title, phase_desc) in enumerate(coder_phases):
@@ -505,7 +501,11 @@ async def run_pipeline(
         label = "coder" if total == 1 else f"coder-{n}"
         all_usages.append(
             await run_agent(
-                CODER, repo, _model(CODER, provider, model_override), hardware, base_url,
+                CODER,
+                repo,
+                _model(CODER, provider, model_override),
+                hardware,
+                base_url,
                 label=label,
                 reference=reference,
                 phase_instruction=phase_instruction,
@@ -514,9 +514,7 @@ async def run_pipeline(
         if not is_final:
             _syntax_check(repo)
 
-    passed, vr_usages = await _verify_and_repair(
-        repo, provider, model_override, base_url, hardware
-    )
+    passed, vr_usages = await _verify_and_repair(repo, provider, model_override, base_url, hardware)
     all_usages.extend(vr_usages)
 
     if not passed:
@@ -529,7 +527,9 @@ async def run_pipeline(
         sys.exit(1)
 
     all_usages.append(
-        await run_agent(CLEANER, repo, _model(CLEANER, provider, model_override), hardware, base_url)
+        await run_agent(
+            CLEANER, repo, _model(CLEANER, provider, model_override), hardware, base_url
+        )
     )
     print(f"\n✅ Done. Replicated baseline is in {repo} (see README.md and REPORT.md).")
     _print_cost_summary(all_usages)

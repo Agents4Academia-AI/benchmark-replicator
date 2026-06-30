@@ -271,7 +271,7 @@ def make_tools(repo: Path) -> dict[str, BaseTool]:
 
     @tool("Grep")
     def grep_tool(pattern: str, path: str | None = None, glob: str | None = None) -> str:
-        """Search file contents with a regex `pattern`. Optional `path` (dir or file) and `glob` filter (e.g. `*.py`)."""
+        """Search file contents with a regex `pattern`. Optional `path` (dir or file) and `glob` filter (e.g. `*.py`)."""  # noqa: E501
         try:
             rx = re.compile(pattern)
         except re.error as exc:
@@ -333,8 +333,14 @@ def make_tools(repo: Path) -> dict[str, BaseTool]:
         )
 
     tools = [
-        read_file, write_file, edit_file, bash,
-        glob_tool, grep_tool, web_fetch, web_search,
+        read_file,
+        write_file,
+        edit_file,
+        bash,
+        glob_tool,
+        grep_tool,
+        web_fetch,
+        web_search,
     ]
     return {t.name: t for t in tools}
 

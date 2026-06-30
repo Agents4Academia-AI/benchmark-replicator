@@ -65,9 +65,20 @@ _GLUED_FLAG = re.compile(r"(?<![\w.])-{1,2}[A-Za-z]+(?=[/~])")
 # root itself (``df -h /tmp``) is allowed by ``_is_allowed_outside``. Anything else
 # outside the repo is denied.
 _ALLOWED_OUTSIDE = (
-    "/usr/", "/bin/", "/lib/", "/opt/", "/System/", "/Library/",
-    "/tmp/", "/var/", "/dev/", "/proc/", "/sys/",
-    "~/.cache/", "~/.keras/", "~/torch/",
+    "/usr/",
+    "/bin/",
+    "/lib/",
+    "/opt/",
+    "/System/",
+    "/Library/",
+    "/tmp/",
+    "/var/",
+    "/dev/",
+    "/proc/",
+    "/sys/",
+    "~/.cache/",
+    "~/.keras/",
+    "~/torch/",
 )
 
 # A whitespace/operator-delimited operand, used to spot ``..`` traversal. Each operand is

@@ -31,7 +31,7 @@ _BARE_RE = re.compile(rf"^(?P<id>{_ARXIV_ID})$", re.IGNORECASE)
 _PDF_URL = "https://arxiv.org/pdf/{id}"
 _HTML_URL = "https://arxiv.org/html/{id}"
 # arXiv blocks the default urllib user agent; pretend to be a normal browser.
-_USER_AGENT = "Mozilla/5.0 (compatible; baseline-replicator/0.1)"
+_USER_AGENT = "Mozilla/5.0 (compatible; benchmark-replicator/0.1)"
 
 
 def parse_arxiv_id(url: str) -> str:
