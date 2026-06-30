@@ -8,10 +8,17 @@ wheels/
 
 # Virtual environments
 .venv
+uv.lock
 
 # Generated baseline repos
 replications/
 
 # Local web UI job state
 .replicator-web/
+
+# macOS
 .DS_Store
+
+# Agents
+AGENTS.md
+CLAUDE.md

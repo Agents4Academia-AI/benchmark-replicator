@@ -1,13 +1,38 @@
 [project]
-name = "baseline-replicator"
+name = "benchmark-replicator"
 version = "0.1.0"
-description = "Turn an arXiv paper or any PDF into a clean, minimal, CPU-runnable baseline implementation using scoped Claude Agent SDK sub-agents."
+description = "Turn an arXiv paper or any PDF into a clean, minimal, modular implementation using scoped Claude Agent SDK sub-agents."
+authors = [
+    { name = "Sahel Iqbal", email = "sahel13miqbal@proton.me" },
+    { name = "Arya Akhavan", email = "aryaakhavanf@gmail.com" },
+    { name = "Olga Isupova", email = "ihoho89@gmail.com" },
+]
 readme = "README.md"
 requires-python = ">=3.14"
+license = { file = "LICENSE" }
+keywords = [
+    "llm",
+    "agents",
+    "research",
+    "reproducibility",
+    "arxiv",
+    "paper",
+    "code-generation",
+]
 dependencies = [
     "claude-agent-sdk>=0.2.101",
     "pymupdf>=1.24",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.15.19",
+]
+
+[project.urls]
+Homepage = "https://github.com/Agents4Academia-AI/benchmark-replicator"
+Repository = "https://github.com/Agents4Academia-AI/benchmark-replicator"
+Issues = "https://github.com/Agents4Academia-AI/benchmark-replicator/issues"
 
 [project.scripts]
 replicate = "replicator.cli:main"
@@ -19,11 +44,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["replicator"]
-
-[dependency-groups]
-dev = [
-    "ruff>=0.15.19",
-]
 
 [tool.ruff]
 line-length = 120

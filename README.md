@@ -1,5 +1,9 @@
 # Benchmark Replicator
 
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
+[![Python ≥3.14](https://img.shields.io/badge/python-%E2%89%A53.14-blue.svg)](https://www.python.org/downloads/)
+[![CI](https://github.com/Agents4Academia-AI/benchmark-replicator/actions/workflows/ci.yml/badge.svg?branch=claude-sdk)](https://github.com/Agents4Academia-AI/benchmark-replicator/actions/workflows/ci.yml?query=branch%3Aclaude-sdk)
+
 Ever opened a paper's codebase to use, extend, or compare against, and given up
 because of how rough, undocumented, or bitrotted it is?
 
@@ -7,56 +11,57 @@ Point this agent at a link to the paper PDF and it builds a clean, minimal,
 modular implementation of the method &mdash; code you can actually read, run, and
 build on, plus the experiments to reproduce the paper's key results.
 
+> **This is the `claude-sdk` branch.** It runs the pipeline on the
+> [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-python), so
+> you can use a Claude subscription instead of an API key. For the
+> provider-agnostic version (Anthropic API, OpenAI, Google Gemini, or a local
+> Ollama / vLLM model), see the [`main` branch](../../tree/main).
+
 ## Installation
 
-Requires Python ≥ 3.14.
-
-With [uv](https://docs.astral.sh/uv/) (recommended):
-
-```bash
-uv sync          # install into the project's virtual environment
-```
-
-With pip:
+Requires Python ≥ 3.14. Install straight from GitHub into a fresh virtual
+environment:
 
 ```bash
-pip install .    # or: pip install -e . for an editable install
+python -m venv .venv && source .venv/bin/activate
+pip install "benchmark-replicator @ git+https://github.com/Agents4Academia-AI/benchmark-replicator.git@claude-sdk"
 ```
+
+Set your Anthropic credentials before running — either an `ANTHROPIC_API_KEY`, or
+sign in with a Claude subscription (the SDK uses the same login as Claude Code):
+
+```bash
+export ANTHROPIC_API_KEY=...   # skip if you're signed in with a Claude subscription
+```
+
+> **Want to hack on the replicator itself?** Clone it and install in editable
+> mode instead &mdash; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Usage
 
-With uv:
-
 ```bash
-uv run replicate https://arxiv.org/abs/<id>
+replicate https://arxiv.org/abs/<id>             # arXiv (also fetches the HTML rendering when available)
+replicate https://example.com/paper.pdf          # any direct PDF URL
+replicate ./paper.pdf                            # a local PDF
 ```
 
-Local browser UI:
+The input can be an arXiv URL/id, a direct PDF URL, or a local PDF path. If the
+entry point isn't on your `PATH`, run it as a module instead:
 
 ```bash
-uv run replicator-web
+python -m replicator.cli https://arxiv.org/abs/<id>
+```
+
+### Local browser UI
+
+```bash
+replicator-web
 ```
 
 Then open `http://127.0.0.1:8765`, submit a paper, review the plan checkpoint,
 and watch the pipeline run. See [docs/web_ui.md](docs/web_ui.md).
 
-The input can be an arXiv URL/id, a direct PDF URL, or a local PDF path:
-
-```bash
-uv run replicate https://arxiv.org/abs/<id>      # arXiv (also fetches the HTML rendering when available)
-uv run replicate https://example.com/paper.pdf   # any direct PDF URL
-uv run replicate ./paper.pdf                     # a local PDF
-```
-
-With plain Python (after `pip install .`):
-
-```bash
-replicate https://arxiv.org/abs/<id>
-# or, without relying on the installed entry point:
-python -m replicator.cli https://arxiv.org/abs/<id>
-```
-
-Options (all forms):
+Options:
 
 ```
 --out DIR                output directory (default: replications/<arxiv-id> or replications/pdf-<hash>)
@@ -69,8 +74,8 @@ Options (all forms):
 Use `--instructions` to steer what the planner focuses on before it writes `PLAN.md`:
 
 ```bash
-uv run replicate https://arxiv.org/abs/1706.03762 --instructions "focus only on scaled dot-product attention, skip multi-head"
-uv run replicate https://arxiv.org/abs/1706.03762 --instructions ./my_notes.md
+replicate https://arxiv.org/abs/1706.03762 --instructions "focus only on scaled dot-product attention, skip multi-head"
+replicate https://arxiv.org/abs/1706.03762 --instructions ./my_notes.md
 ```
 
 The generated baseline lands in the output directory &mdash; a standalone repo with its own
@@ -125,6 +130,18 @@ replicator/
 └── prompts/      # one system prompt per sub-agent
 ```
 
+## Contributing
+
+Contributions are welcome &mdash; bug reports, prompt improvements, pipeline
+enhancements, and docs. See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the dev
+setup, how to run the checks, and the PR process, and
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community expectations.
+
+## License
+
+[AGPL-3.0](LICENSE). In short: it's free and open for everyone, and if you
+distribute a modified version &mdash; including running it as a network service
+&mdash; you must share your changes under the same license.
 
 ---
 

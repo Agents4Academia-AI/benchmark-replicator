@@ -573,8 +573,8 @@ def _syntax_check(repo: Path) -> None:
     """Syntax-check the coder's Python files; warn the operator but never abort.
 
     Parses each file in-process with ``ast.parse`` (non-mutating — no ``__pycache__``
-    artifacts, and no dependency on a ``python`` executable being on ``PATH``; the
-    pipeline runs under ``uv``). Skips ``__pycache__`` and any hidden directory
+    artifacts, and no dependency on a ``python`` executable being on ``PATH``).
+    Skips ``__pycache__`` and any hidden directory
     (``.replicator/`` reference clone and logs, the ``.venv/`` the coder may create,
     ``.git/`` …) so it only ever flags files the coder actually wrote, and reports —
     rather than aborting on — a file that is not valid UTF-8 (e.g. a vendored test

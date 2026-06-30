@@ -7,9 +7,10 @@ browser.
 
 ## Start It
 
+After installing the project (see the [README](../README.md)):
+
 ```bash
-uv sync
-uv run replicator-web
+replicator-web
 ```
 
 Or, without the installed entry point:
@@ -20,7 +21,8 @@ python -m replicator.web
 
 Use the second form only when that Python interpreter already has the project
 dependencies installed. If the page reports missing `pymupdf` or
-`claude-agent-sdk`, start it with `uv run replicator-web` after `uv sync`.
+`claude-agent-sdk`, install the project into this interpreter with
+`pip install -e .` and start it again.
 
 Then open:
 

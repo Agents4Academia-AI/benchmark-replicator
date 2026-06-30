@@ -59,10 +59,7 @@ def _environment_status() -> dict[str, Any]:
         warnings.append(
             f"pyproject.toml declares Python >=3.14; this server is running Python {sys.version.split()[0]}."
         )
-    install_hint = (
-        "Run `uv sync` and start the UI with `uv run replicator-web`, or install "
-        f"the project into this interpreter: `{sys.executable} -m pip install -e .`"
-    )
+    install_hint = f"Install the project into this interpreter: `{sys.executable} -m pip install -e .`"
     return {
         "ok": not missing,
         "python": sys.version.split()[0],
