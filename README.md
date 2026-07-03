@@ -43,9 +43,6 @@ Then set the API key for your provider (a local Ollama model needs none):
 export ANTHROPIC_API_KEY=...   # or OPENAI_API_KEY / GOOGLE_API_KEY
 ```
 
-> **Want to hack on the replicator itself?** Clone it and install in editable
-> mode instead &mdash; see [CONTRIBUTING.md](CONTRIBUTING.md).
-
 > **Claude subscription users:** if you'd rather use your Claude monthly plan instead of an API key, check out the [`claude-sdk` branch](../../tree/claude-sdk).
 
 ## Usage
