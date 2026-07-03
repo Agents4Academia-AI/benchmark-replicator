@@ -15,7 +15,7 @@ build on, plus the experiments to reproduce the paper's key results.
 
 A timelapse of the agent turning a paper into a clean, runnable baseline repo:
 
-https://github.com/Agents4Academia-AI/benchmark-replicator/raw/main/docs/timelapse.mp4
+https://github.com/user-attachments/assets/48e06395-4af0-498c-96d2-8922d719a26d
 
 ## Installation
 
