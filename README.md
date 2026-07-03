@@ -116,8 +116,6 @@ setup, how to run the checks, and the PR process, and
 distribute a modified version &mdash; including running it as a network service
 &mdash; you must share your changes under the same license.
 
----
-
 ## Acknowledgements
 
-Built during [Agents4Academia](https://github.com/Agents4Academia-AI), 14–26 June 2026.
+Built during [Agents4Academia](https://agents4academia.github.io/) at Oxford, 14–26 June 2026.
