@@ -11,6 +11,12 @@ Point this agent at a link to the paper PDF and it builds a clean, minimal,
 modular implementation of the method &mdash; code you can actually read, run, and
 build on, plus the experiments to reproduce the paper's key results.
 
+## Demo
+
+A timelapse of the agent turning a paper into a clean, runnable baseline repo:
+
+https://github.com/user-attachments/assets/48e06395-4af0-498c-96d2-8922d719a26d
+
 ## Installation
 
 Requires Python ≥ 3.10. Install straight from GitHub into a fresh virtual
@@ -36,9 +42,6 @@ Then set the API key for your provider (a local Ollama model needs none):
 ```bash
 export ANTHROPIC_API_KEY=...   # or OPENAI_API_KEY / GOOGLE_API_KEY
 ```
-
-> **Want to hack on the replicator itself?** Clone it and install in editable
-> mode instead &mdash; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 > **Claude subscription users:** if you'd rather use your Claude monthly plan instead of an API key, check out the [`claude-sdk` branch](../../tree/claude-sdk).
 
@@ -92,6 +95,8 @@ vLLM). After planning, the pipeline **pauses for your approval** of `PLAN.md`
 before any code is written. Pass `--yes` to skip this checkpoint for unattended
 runs (e.g. batch jobs on an HPC cluster).
 
+![Pipeline overview: paper → planner → human checkpoint → coder → verify-and-repair loop → cleaner](docs/pipeline.png)
+
 See **[docs/how_it_works.md](docs/how_it_works.md)** for the full pipeline, the
 verify-and-repair loop, and an annotated diagram.
 
@@ -108,8 +113,6 @@ setup, how to run the checks, and the PR process, and
 distribute a modified version &mdash; including running it as a network service
 &mdash; you must share your changes under the same license.
 
----
-
 ## Acknowledgements
 
-Built during [Agents4Academia](https://github.com/Agents4Academia-AI), 14–26 June 2026.
+Built during [Agents4Academia](https://agents4academia.github.io/) at Oxford, 14–26 June 2026.
