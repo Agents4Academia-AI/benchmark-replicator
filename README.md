@@ -98,47 +98,7 @@ vLLM). After planning, the pipeline **pauses for your approval** of `PLAN.md`
 before any code is written. Pass `--yes` to skip this checkpoint for unattended
 runs (e.g. batch jobs on an HPC cluster).
 
-```mermaid
-flowchart TD
-    subgraph legend [" "]
-        direction LR
-        L1["higher-reasoning agents"]:::higher
-        L2["lower-reasoning agents"]:::lower
-        L3["orchestrator &amp; I/O"]:::io
-    end
-
-    Paper["<b>Paper</b><br>PDF · HTML · text"]:::io
-    Planner["<b>① Planner</b><br>writes the plan"]:::higher
-    Checkpoint["<b>Human checkpoint</b><br>approve or revise"]:::io
-    Reviser["<b>② Reviser</b><br>revise on chat"]:::higher
-    Coder["<b>③ Coder</b><br>builds the repo"]:::higher
-
-    subgraph loop ["④ Verify &amp; repair loop — judges diagnose · max 2 repairs"]
-        Tester["<b>④a Tester</b><br>writes &amp; runs tests"]:::lower
-        Bench["<b>④b Benchmarker</b><br>runs end-to-end"]:::lower
-        Mech["<b>Mechanical check</b><br>criteria vs results"]:::io
-        Repair["<b>④c Repair</b><br>fixes root cause, then re-verify"]:::higher
-
-        Tester --> Bench --> Mech
-        Bench -->|fail| Repair
-        Repair -->|re-run| Tester
-    end
-
-    Cleaner["<b>⑤ Cleaner</b><br>lint, format, README"]:::lower
-    Done["<b>Done</b><br>clean baseline repo"]:::io
-
-    Paper --> Planner --> Checkpoint
-    Checkpoint -->|"on [c]hat"| Reviser
-    Reviser --> Checkpoint
-    Checkpoint --> Coder
-    Coder -->|results.json| Tester
-    Mech -->|judges pass| Cleaner
-    Cleaner --> Done
-
-    classDef higher fill:#E7E4FB,stroke:#B7B0EE,color:#3D2C8D
-    classDef lower fill:#D6F0E0,stroke:#9BD9B8,color:#1B6B45
-    classDef io fill:#ECE7DE,stroke:#D4CCBE,color:#3A3A3A
-```
+![Pipeline overview: paper → planner → human checkpoint → coder → verify-and-repair loop → cleaner](docs/pipeline.png)
 
 See **[docs/how_it_works.md](docs/how_it_works.md)** for the full pipeline, the
 verify-and-repair loop, and an annotated diagram.
