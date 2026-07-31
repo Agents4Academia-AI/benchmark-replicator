@@ -1,7 +1,7 @@
 """Definitions of the pipeline's scoped sub-agents.
 
-Each phase is one LangGraph ReAct agent with its own system prompt, a restricted
-tool set, and a turn cap. Phases share state through files in the generated repo
+Each phase is one isolated Codex thread with its own system prompt and scoped
+capabilities. Phases share state through files in the generated repo
 (``PLAN.md``, the source code, ``REPORT.md``).
 """
 
@@ -76,9 +76,6 @@ class Phase:
     allowed_tools: list[str]
     """Tools this sub-agent may call. Everything else is unavailable."""
 
-    max_turns: int = 80
-    """Hard cap on agentic turns, to bound cost."""
-
     def system_prompt(self, hardware: str) -> str:
         """Load this phase's system prompt from ``prompts/<name>.md``.
 
@@ -117,7 +114,6 @@ REVISER = Phase(
     # Like the planner (paper + web) plus Edit, for surgical changes to the existing
     # PLAN.md and criteria.json.
     allowed_tools=[*_READ_TOOLS, "Write", "Edit", "WebFetch", "WebSearch"],
-    max_turns=40,
 )
 
 CODER = Phase(

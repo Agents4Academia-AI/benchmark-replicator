@@ -55,7 +55,7 @@ reproduction.
    reference values when writing method-invariant tests.
 2. Add `pytest` tests under `tests/` (and add `pytest` to the dev dependencies in
    `pyproject.toml`/`requirements.txt`). Keep every test fast — seconds not minutes.
-3. Run the tests with Bash. When a test fails, decide whether the bug is **in your test**
+3. Run the tests in the shell. When a test fails, decide whether the bug is **in your test**
    or **in the implementation**:
    - If the test is wrong, fix the test and re-run.
    - If the implementation is genuinely wrong, **leave the source code unchanged** and

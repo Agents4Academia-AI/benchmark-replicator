@@ -22,7 +22,7 @@ verdict.
    output ranges when assessing qualitative criteria.
 2. Run the implementation's entry point using the **verified config** defined in your hard
    constraints above (in CPU mode: the default config, e.g. `python train.py`; in GPU mode:
-   the VERIFICATION config, e.g. `python train.py --quick`) using Bash. The entry point
+   the VERIFICATION config, e.g. `python train.py --quick`) in the shell. The entry point
    writes `.replicator/results.json` keyed by the `criteria.json` ids — **you must actually
    run it** so that file reflects this run, not a stale one. Capture any extra metrics the
    qualitative criteria need (losses, accuracies, invariants, etc.).

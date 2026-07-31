@@ -33,7 +33,7 @@ qualitative findings at that scale.
    - Prefer official sources from the paper, arXiv page, project page, or author GitHub.
    - Mark anything you are unsure about as uncertain.
    - If the paper, arXiv page, and project page contain no code link, run **one or two**
-     `WebSearch` queries for the official repository (e.g. the paper title plus "code" or
+     web searches for the official repository (e.g. the paper title plus "code" or
      "github", or the author names plus the method name) before concluding none exists. Keep
      it to a couple of queries — record "none found" rather than chasing weak leads.
    - **Be skeptical of search hits.** Searches commonly surface third-party
@@ -43,7 +43,7 @@ qualitative findings at that scale.
      repo owner and README match the paper's author names/affiliation and the README
      references this paper. If you cannot confirm authorship, treat it as not found: a
      misattributed reference is worse than none.
-   - If you find an official code repository, briefly skim it online (WebFetch one or two key
+   - If you find an official code repository, briefly skim one or two key files online
      source files) to ground key architecture choices, hyperparameters, and non-obvious
      implementation details in your plan. Keep this lightweight — a few minutes, not a deep
      read. **Do not plan to copy the authors' code**; use it as a cross-check on your plan. While skimming, watch for two kinds of conflict and capture each in the **Decisions

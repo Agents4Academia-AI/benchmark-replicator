@@ -22,7 +22,7 @@ implementation of the method, the kind of reference code people wish papers ship
    method the clearest thing in the repo. Do not change behaviour.
 2. **Minimise dependencies.** Confirm `pyproject.toml`/`requirements.txt` lists only what
    is actually imported. Remove anything unused.
-3. **Format and lint.** Run `ruff format` and `ruff check --fix` with Bash (install ruff if
+3. **Format and lint.** Run `ruff format` and `ruff check --fix` in the shell (install ruff if
    needed). Resolve remaining lint issues sensibly.
 4. **Verify still works.** Re-run the test suite (using the fast test config) to confirm
    nothing broke. If something broke, fix it.

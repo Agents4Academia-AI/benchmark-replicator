@@ -41,7 +41,7 @@ from .verdict import (
 # How many times the orchestrator will repair-and-re-verify before giving up.
 _MAX_REPAIR_ATTEMPTS = 2
 
-# Upper bound on coder phases parsed from PLAN.md — each phase is a full opus run, so a
+# Upper bound on coder phases parsed from PLAN.md — each phase is a full Codex run, so a
 # runaway plan (or an over-eager human edit at the checkpoint) must not multiply cost.
 _MAX_CODER_PHASES = 4
 
@@ -160,9 +160,7 @@ def _decisions_needed(plan_text: str) -> str:
 
 async def _checkpoint(
     repo: Path,
-    provider: str,
     model_override: str | None,
-    base_url: str | None,
     usages: list[PhaseUsage],
     hardware: str,
     auto_approve: bool = False,
@@ -202,9 +200,8 @@ async def _checkpoint(
                 await run_chat_agent(
                     REVISER,
                     repo,
-                    _model(REVISER, provider, model_override),
+                    _model(REVISER, model_override),
                     hardware,
-                    base_url,
                     paper_sources=_paper_sources(repo),
                 )
             )
@@ -212,8 +209,8 @@ async def _checkpoint(
         return False
 
 
-def _model(phase: Phase, provider: str, override: str | None) -> str:
-    return resolve_model(phase.name, provider, override)
+def _model(phase: Phase, override: str | None) -> str:
+    return resolve_model(phase.name, override)
 
 
 def _apply_mechanical_check(repo: Path, verdict: Verdict) -> Verdict:
@@ -237,7 +234,7 @@ def _apply_mechanical_check(repo: Path, verdict: Verdict) -> Verdict:
 
 
 async def _verify_and_repair(
-    repo: Path, provider: str, model_override: str | None, base_url: str | None, hardware: str
+    repo: Path, model_override: str | None, hardware: str
 ) -> tuple[bool, list[PhaseUsage]]:
     """Run the judging phases; on a failure verdict, repair and re-verify.
 
@@ -268,9 +265,8 @@ async def _verify_and_repair(
                 await run_agent(
                     judge,
                     repo,
-                    _model(judge, provider, model_override),
+                    _model(judge, model_override),
                     hardware,
-                    base_url,
                     reference=reference,
                 )
             )
@@ -301,9 +297,8 @@ async def _verify_and_repair(
             await run_agent(
                 REPAIR,
                 repo,
-                _model(REPAIR, provider, model_override),
+                _model(REPAIR, model_override),
                 hardware,
-                base_url,
                 label=f"repair-{attempts}",
                 pdf=_paper_pdf(repo),
                 failures=format_failures([failure]),
@@ -312,30 +307,21 @@ async def _verify_and_repair(
         )
 
 
-def _fmt_cost(cost: float | None) -> str:
-    """USD cell for the summary, or a dash when the model's price is unknown."""
-    return f"${cost:>9.4f}" if cost is not None else f"{'—':>10}"
-
-
-def _print_cost_summary(usages: list[PhaseUsage]) -> None:
+def _print_usage_summary(usages: list[PhaseUsage]) -> None:
     total_in = sum(u.input_tokens for u in usages)
     total_out = sum(u.output_tokens for u in usages)
-    costs = [u.cost_usd for u in usages if u.cost_usd is not None]
-    total_cost = sum(costs) if costs else None
 
     w = 18  # label column width
-    print(f"\n{'─' * 62}")
-    print("  Cost summary")
-    print(f"{'─' * 62}")
-    print(f"  {'Phase':<{w}}  {'Input tok':>10}  {'Output tok':>10}  {'Cost (USD)':>10}")
-    print(f"  {'─' * (w)}  {'─' * 10}  {'─' * 10}  {'─' * 10}")
+    print(f"\n{'─' * 48}")
+    print("  Token usage")
+    print(f"{'─' * 48}")
+    print(f"  {'Phase':<{w}}  {'Input tok':>10}  {'Output tok':>10}")
+    print(f"  {'─' * w}  {'─' * 10}  {'─' * 10}")
     for u in usages:
-        print(
-            f"  {u.label:<{w}}  {u.input_tokens:>10,}  {u.output_tokens:>10,}  {_fmt_cost(u.cost_usd)}"
-        )
-    print(f"  {'─' * (w)}  {'─' * 10}  {'─' * 10}  {'─' * 10}")
-    print(f"  {'TOTAL':<{w}}  {total_in:>10,}  {total_out:>10,}  {_fmt_cost(total_cost)}")
-    print(f"{'─' * 62}")
+        print(f"  {u.label:<{w}}  {u.input_tokens:>10,}  {u.output_tokens:>10,}")
+    print(f"  {'─' * w}  {'─' * 10}  {'─' * 10}")
+    print(f"  {'TOTAL':<{w}}  {total_in:>10,}  {total_out:>10,}")
+    print(f"{'─' * 48}")
 
 
 def _parse_coder_phases(repo: Path) -> list[tuple[str, str]]:
@@ -429,9 +415,7 @@ def _syntax_check(repo: Path) -> None:
 
 async def run_pipeline(
     repo: Path,
-    provider: str = "anthropic",
     model_override: str | None = None,
-    base_url: str | None = None,
     instructions: str = "",
     gpu: bool = False,
     auto_approve: bool = False,
@@ -461,18 +445,15 @@ async def run_pipeline(
         await run_agent(
             PLANNER,
             repo,
-            _model(PLANNER, provider, model_override),
+            _model(PLANNER, model_override),
             hardware,
-            base_url,
             sources=_paper_sources(repo),
             instructions=instructions_block,
         )
     )
-    if not await _checkpoint(
-        repo, provider, model_override, base_url, all_usages, hardware, auto_approve
-    ):
+    if not await _checkpoint(repo, model_override, all_usages, hardware, auto_approve):
         print("\n✋ Stopped at planning checkpoint. The plan is in PLAN.md.")
-        _print_cost_summary(all_usages)
+        _print_usage_summary(all_usages)
         sys.exit(0)
 
     code_url = _read_code_url(repo)
@@ -503,9 +484,8 @@ async def run_pipeline(
             await run_agent(
                 CODER,
                 repo,
-                _model(CODER, provider, model_override),
+                _model(CODER, model_override),
                 hardware,
-                base_url,
                 label=label,
                 reference=reference,
                 phase_instruction=phase_instruction,
@@ -514,7 +494,7 @@ async def run_pipeline(
         if not is_final:
             _syntax_check(repo)
 
-    passed, vr_usages = await _verify_and_repair(repo, provider, model_override, base_url, hardware)
+    passed, vr_usages = await _verify_and_repair(repo, model_override, hardware)
     all_usages.extend(vr_usages)
 
     if not passed:
@@ -523,13 +503,9 @@ async def run_pipeline(
             f"{_MAX_REPAIR_ATTEMPTS} repair attempt(s).\n"
             f"    See REPORT.md and {VERDICT_PATH} for the outstanding failures."
         )
-        _print_cost_summary(all_usages)
+        _print_usage_summary(all_usages)
         sys.exit(1)
 
-    all_usages.append(
-        await run_agent(
-            CLEANER, repo, _model(CLEANER, provider, model_override), hardware, base_url
-        )
-    )
+    all_usages.append(await run_agent(CLEANER, repo, _model(CLEANER, model_override), hardware))
     print(f"\n✅ Done. Replicated baseline is in {repo} (see README.md and REPORT.md).")
-    _print_cost_summary(all_usages)
+    _print_usage_summary(all_usages)

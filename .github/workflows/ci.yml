@@ -21,7 +21,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Install (no provider extras — CI makes no LLM/network calls)
+      - name: Install (tests make no model or network calls)
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"

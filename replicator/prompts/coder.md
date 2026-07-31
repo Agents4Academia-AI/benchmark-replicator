@@ -95,7 +95,7 @@ wrong way). These are the cheapest bugs to catch and the most common to miss.
    python train.py
    ```
    Users should be able to clone the repo and run `bash run.sh` to reproduce the result.
-6. Do a quick verification run yourself with Bash using the **fast test** config (e.g. a
+6. Do a quick verification run yourself in the shell using the **fast test** config (e.g. a
    handful of steps) to confirm the code executes and the method moves in the right
    direction. Fix anything that crashes. Keep these iterations fast — save the full default
    run for the benchmarker. Use the **fast test** config *only*: do **not** run the

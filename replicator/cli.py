@@ -12,7 +12,6 @@ import asyncio
 import sys
 from pathlib import Path
 
-from .agent import PROVIDERS
 from .paper import (
     copy_local_pdf,
     download_html,
@@ -43,25 +42,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "(default: replications/<arxiv-id> or replications/pdf-<hash>).",
     )
     parser.add_argument(
-        "--provider",
-        default="anthropic",
-        choices=PROVIDERS,
-        help="LLM provider for the default per-phase models (default: anthropic). "
-        "Use 'openai' with --base-url to reach an OpenAI-compatible local server (vLLM/llama.cpp). "
-        "API keys come from the standard env vars (ANTHROPIC_API_KEY, OPENAI_API_KEY, …).",
-    )
-    parser.add_argument(
         "--model",
         default=None,
-        help="Override the model for every phase with a 'provider:model' id "
-        "(e.g. 'openai:gpt-5.1', 'ollama:qwen3-coder:30b'). "
-        "Default: a strong model for planning/coding and a cheaper one for the rest.",
-    )
-    parser.add_argument(
-        "--base-url",
-        default=None,
-        help="Base URL of an OpenAI-compatible or custom model server "
-        "(e.g. http://localhost:8000/v1 for vLLM, or a custom ollama host).",
+        help="Override the Codex model for every phase (default: gpt-5.6-sol).",
     )
     parser.add_argument(
         "--instructions",
@@ -141,10 +124,7 @@ def main(argv: list[str] | None = None) -> None:
     instructions = _resolve_instructions(args.instructions)
     if instructions:
         print(f"Instructions: {instructions[:80]}{'…' if len(instructions) > 80 else ''}")
-    print(
-        f"LLM:   provider={args.provider}"
-        + (f", base_url={args.base_url}" if args.base_url else "")
-    )
+    print(f"Agent: Codex{f' (model={args.model})' if args.model else ''}")
     if args.gpu:
         print("Mode:  GPU (full + verification configs)")
     if args.yes:
@@ -152,9 +132,7 @@ def main(argv: list[str] | None = None) -> None:
     asyncio.run(
         run_pipeline(
             repo,
-            provider=args.provider,
             model_override=args.model,
-            base_url=args.base_url,
             instructions=instructions,
             gpu=args.gpu,
             auto_approve=args.yes,

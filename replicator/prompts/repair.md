@@ -30,7 +30,7 @@ needed to fix the reported failures.
 3. Fix the source code. Prefer the smallest change that addresses the root cause. Comment
    any non-obvious correction, and cite the paper's equation/section number when a fix comes
    from the paper.
-4. Do a quick run with Bash using the **fast test** config to confirm your fix executes and
+4. Do a quick shell run using the **fast test** config to confirm your fix executes and
    moves the failing behaviour in the right direction. Keep these iterations fast.
 
 ## Hard constraints
