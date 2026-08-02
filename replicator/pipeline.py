@@ -3,8 +3,8 @@
 The orchestration is deterministic Python — we do not rely on the model to
 auto-delegate. Each phase is an independent agent run (see ``agent.py``) with a
 fresh context; state is shared only through files in the generated repo. After the
-planner phase the pipeline pauses for the user to approve ``PLAN.md`` before any
-code is written.
+planner phase the pipeline pauses for approval, then tries bounded official-code
+adoption before falling back to the original scratch implementation path.
 """
 
 from __future__ import annotations
@@ -12,19 +12,52 @@ from __future__ import annotations
 import ast
 import json
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
+from .adoption import (
+    ADOPTION_PATH,
+    CANDIDATE_PATH,
+    REFERENCE_PATH,
+    STAGES,
+    WORKING_PATH,
+    Candidate,
+    OfficialProvenance,
+    acquire_official_code,
+    execute_candidate,
+    is_environment_path,
+    load_candidate,
+    make_working_copy,
+    new_adoption_record,
+    remove_tree,
+    source_changes,
+    source_patch,
+    validate_stage_changes,
+    write_adoption,
+)
 from .agent import AgentSettings, PhaseUsage, resolve_agent_settings, run_agent, run_chat_agent
 from .criteria import mechanical_failures
-from .paper import clone_reference_code
+from .manifest import (
+    install_runner,
+    manifest_from_candidate,
+    scratch_manifest,
+    validate_manifest,
+    write_manifest,
+)
 from .phases import (
+    ADAPTER,
+    ADOPTION_INSPECTOR,
     BENCHMARKER,
     CLEANER,
     CODER,
+    ENVIRONMENT_FIXER,
     PLANNER,
     REPAIR,
     REVISER,
+    SOURCE_PATCHER,
     TESTER,
     Phase,
     hardware_profile,
@@ -44,6 +77,9 @@ _MAX_REPAIR_ATTEMPTS = 2
 # Upper bound on coder phases parsed from PLAN.md — each phase is a full Codex run, so a
 # runaway plan (or an over-eager human edit at the checkpoint) must not multiply cost.
 _MAX_CODER_PHASES = 4
+
+# Each official-code adoption stage gets one model turn and one local execution.
+_ADOPTION_TIMEOUT_SECONDS = 900
 
 
 def _paper_pdf(repo: Path) -> str:
@@ -425,6 +461,413 @@ def _syntax_check(repo: Path) -> None:
         print(f"  ⚠ Syntax errors found (next phase will need to fix these):\n{joined[:400]}")
 
 
+def _record_successful_adoption(
+    record: dict, reference: Path, working: Path, candidate: Candidate
+) -> None:
+    changes = source_changes(reference, working)
+    environment = [path for path in changes if is_environment_path(path)]
+    record["environment_changes"] = sorted(environment)
+    record["adapters"] = sorted(path for path in candidate.adapter_files if path in changes)
+    record["source_modifications"] = sorted(
+        path
+        for path in changes
+        if path not in environment
+        and path not in candidate.adapter_files
+        and path != candidate.result_path
+    )
+    record["source_patch"] = source_patch(reference, working, {candidate.result_path})
+
+
+async def _attempt_official_code(
+    repo: Path,
+    code_url: str | None,
+    model_override: str | None,
+    agent_settings: dict[str, AgentSettings],
+    hardware: str,
+    usages: list[PhaseUsage],
+) -> tuple[str | None, Candidate | None, OfficialProvenance | None, dict]:
+    """Run the four fixed adoption levels, once each, on a disposable copy."""
+    reference = repo / REFERENCE_PATH
+    working = repo / WORKING_PATH
+    adoption_path = repo / ADOPTION_PATH
+    if not code_url:
+        record = new_adoption_record(None, strategy="reuse-first")
+        record["failures"].append("planner found no verified official code repository")
+        write_adoption(adoption_path, record)
+        return None, None, None, record
+
+    provenance = acquire_official_code(code_url, reference)
+    record = new_adoption_record(provenance, strategy="reuse-first")
+    if provenance is None:
+        record["failures"].append("official repository could not be retrieved")
+        write_adoption(adoption_path, record)
+        return None, None, None, record
+
+    print(
+        f"Official: preserved {code_url} at {REFERENCE_PATH} "
+        f"({provenance.commit_sha[:12]}, license: {provenance.license})"
+    )
+    make_working_copy(reference, working)
+    context = working / ".replicator" / "context"
+    context.mkdir(parents=True)
+    if (repo / "PLAN.md").exists():
+        shutil.copy2(repo / "PLAN.md", context / "PLAN.md")
+    if (repo / ".replicator" / "criteria.json").exists():
+        shutil.copy2(repo / ".replicator" / "criteria.json", context / "criteria.json")
+    inspector_settings = _model(ADOPTION_INSPECTOR, model_override, agent_settings)
+    try:
+        usages.append(
+            await run_agent(
+                ADOPTION_INSPECTOR,
+                working,
+                inspector_settings.model,
+                hardware,
+                reasoning_effort=inspector_settings.reasoning_effort,
+            )
+        )
+    except Exception as exc:
+        record["failures"].append(f"official-code inspection failed: {exc}")
+        write_adoption(adoption_path, record)
+        remove_tree(working)
+        return None, None, provenance, record
+    if source_changes(reference, working):
+        record["failures"].append("official-code inspector modified its read-only working copy")
+        write_adoption(adoption_path, record)
+        remove_tree(working)
+        return None, None, provenance, record
+
+    candidate_path = working / CANDIDATE_PATH
+    phases = {
+        "environment": ENVIRONMENT_FIXER,
+        "adapter": ADAPTER,
+        "source_patch": SOURCE_PATCHER,
+    }
+    failure = "The initial candidate has not run yet."
+    for origin, action_name in STAGES:
+        if action_name:
+            phase = phases[action_name]
+            with tempfile.TemporaryDirectory(prefix="replicator-adoption-") as temp:
+                backup = Path(temp) / "working"
+                reference_backup = Path(temp) / "reference"
+                shutil.copytree(working, backup, symlinks=True)
+                shutil.copytree(reference, reference_backup, symlinks=True)
+                candidate_backup = candidate_path.read_bytes() if candidate_path.exists() else None
+                settings = _model(phase, model_override, agent_settings)
+                phase_error = ""
+                try:
+                    usages.append(
+                        await run_agent(
+                            phase,
+                            working,
+                            settings.model,
+                            hardware,
+                            reasoning_effort=settings.reasoning_effort,
+                            failure=failure,
+                        )
+                    )
+                except Exception as exc:
+                    phase_error = f"{phase.name} failed: {exc}"
+                if phase_error:
+                    allowed, detail = False, phase_error
+                else:
+                    try:
+                        candidate = load_candidate(candidate_path)
+                        allowed, detail = validate_stage_changes(
+                            origin, reference, working, candidate
+                        )
+                    except Exception as exc:
+                        allowed, detail = False, str(exc)
+                immutable_changes = source_changes(reference_backup, reference)
+                if immutable_changes:
+                    remove_tree(reference)
+                    shutil.copytree(reference_backup, reference, symlinks=True)
+                    allowed = False
+                    detail = "stage attempted to modify the immutable official reference"
+                if not allowed:
+                    remove_tree(working)
+                    shutil.copytree(backup, working, symlinks=True)
+                    if candidate_backup is None:
+                        candidate_path.unlink(missing_ok=True)
+                    else:
+                        candidate_path.write_bytes(candidate_backup)
+                    failure = detail
+                    record["attempts"].append(
+                        {"stage": origin, "status": "failed", "failure": detail}
+                    )
+                    record["failures"].append(detail)
+                    write_adoption(adoption_path, record)
+                    continue
+        try:
+            candidate = load_candidate(candidate_path)
+            allowed, detail = validate_stage_changes(origin, reference, working, candidate)
+        except Exception as exc:
+            candidate, allowed, detail = None, False, str(exc)
+        if not allowed or candidate is None:
+            failure = detail
+            record["attempts"].append({"stage": origin, "status": "failed", "failure": detail})
+            record["failures"].append(detail)
+            write_adoption(adoption_path, record)
+            continue
+
+        result = execute_candidate(candidate, working, _ADOPTION_TIMEOUT_SECONDS)
+        attempt = {
+            "stage": origin,
+            "status": "succeeded" if result.succeeded else "failed",
+            "command": result.command,
+            "returncode": result.returncode,
+            "runtime_seconds": round(result.runtime_seconds, 3),
+        }
+        if result.failure:
+            attempt["failure"] = result.failure
+            record["failures"].append(result.failure)
+        record["attempts"].append(attempt)
+        if result.succeeded:
+            record["selected_origin"] = origin
+            _record_successful_adoption(record, reference, working, candidate)
+            write_adoption(adoption_path, record)
+            print(f"Adoption: {origin} candidate ran successfully.")
+            return origin, candidate, provenance, record
+        failure = result.failure
+        write_adoption(adoption_path, record)
+
+    remove_tree(working)
+    return None, None, provenance, record
+
+
+def _seed_verification_repo(
+    repo: Path,
+    working: Path,
+    candidate: Candidate,
+    origin: str,
+    provenance: OfficialProvenance,
+    record: dict,
+    hardware_mode: str,
+) -> Path:
+    """Build an isolated repo so failed adoption judges cannot pollute scratch output."""
+    stage = repo / ".replicator" / "adoption_verification"
+    remove_tree(stage)
+    stage.mkdir(parents=True)
+    for name in ("PLAN.md",):
+        if (repo / name).exists():
+            shutil.copy2(repo / name, stage / name)
+    shutil.copytree(repo / "paper", stage / "paper", symlinks=True)
+    control = stage / ".replicator"
+    control.mkdir()
+    for name in ("criteria.json", "artifacts.json"):
+        source = repo / ".replicator" / name
+        if source.exists():
+            shutil.copy2(source, control / name)
+    shutil.copytree(repo / REFERENCE_PATH, control / "reference_code", symlinks=True)
+    shutil.copytree(
+        working,
+        stage / "official",
+        symlinks=True,
+        ignore=shutil.ignore_patterns(
+            ".replicator", ".venv", "__pycache__", ".pytest_cache", ".ruff_cache"
+        ),
+    )
+    modifications = [
+        *record.get("environment_changes", []),
+        *record.get("adapters", []),
+        *record.get("source_modifications", []),
+    ]
+    manifest = manifest_from_candidate(
+        stage,
+        candidate,
+        origin=origin,
+        provenance=provenance,
+        modifications=modifications,
+        hardware_mode=hardware_mode,
+    )
+    write_manifest(stage, manifest)
+    install_runner(stage)
+    (stage / "run-spec.json").write_text("{}\n")
+    return stage
+
+
+def _mark_manifest_verified(
+    repo: Path, origin: str | None = None, modifications: list[str] | None = None
+) -> None:
+    manifest = json.loads((repo / "baseline.json").read_text())
+    manifest["status"] = "success"
+    manifest["verification"]["status"] = "passed"
+    if origin is not None:
+        manifest["implementation_origin"] = origin
+    if modifications is not None:
+        manifest["modifications"] = modifications
+    write_manifest(repo, manifest)
+    install_runner(repo)
+
+
+def _run_stable_runner(repo: Path) -> tuple[bool, str]:
+    """Validate the manifest and execute the portable default contract once."""
+    try:
+        manifest = json.loads((repo / "baseline.json").read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, f"baseline.json is unreadable: {exc}"
+    errors = validate_manifest(manifest)
+    if errors:
+        return False, "; ".join(errors)
+    try:
+        result = subprocess.run(
+            ["bash", "run.sh", "--spec", "run-spec.json", "--output", "run-result.json"],
+            cwd=repo,
+            timeout=_ADOPTION_TIMEOUT_SECONDS,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return False, str(exc)
+    if result.returncode:
+        return False, (result.stderr.strip() or result.stdout.strip())[-2000:]
+    try:
+        normalized = json.loads((repo / "run-result.json").read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, f"run-result.json is unreadable: {exc}"
+    required = {"status", "seed", "metrics", "runtime_seconds", "implementation_origin"}
+    if not isinstance(normalized, dict) or not required <= normalized.keys():
+        return False, "run-result.json does not satisfy the normalized result contract"
+    if normalized["status"] != "success":
+        return False, "stable runner did not report success"
+    failures, _notes = mechanical_failures(repo)
+    if failures:
+        return False, "stable runner metrics failed mechanical criteria: " + ", ".join(
+            failure.criterion for failure in failures
+        )
+    return True, ""
+
+
+def _mark_manifest_pending(repo: Path) -> None:
+    manifest = json.loads((repo / "baseline.json").read_text())
+    manifest["status"] = "pending"
+    manifest["verification"]["status"] = "pending"
+    write_manifest(repo, manifest)
+
+
+def _promote_verification_repo(stage: Path, repo: Path) -> None:
+    """Promote a verified adoption while preserving outer provenance and paper files."""
+    for child in stage.iterdir():
+        if child.name in {"PLAN.md", "paper", ".replicator"}:
+            continue
+        target = repo / child.name
+        if target.exists() or target.is_symlink():
+            if target.is_dir() and not target.is_symlink():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+        if child.is_dir() and not child.is_symlink():
+            shutil.copytree(child, target, symlinks=True)
+        else:
+            shutil.copy2(child, target)
+    stage_control = stage / ".replicator"
+    outer_control = repo / ".replicator"
+    for name in ("run.py", "results.json", "verdict.json"):
+        source = stage_control / name
+        if source.exists():
+            shutil.copy2(source, outer_control / name)
+    if (stage_control / "logs").exists():
+        shutil.copytree(stage_control / "logs", outer_control / "logs", dirs_exist_ok=True)
+
+
+def _discard_adoption(repo: Path, stage: Path, record: dict, failure: str) -> bool:
+    record["failures"].append(failure)
+    record["selected_origin"] = None
+    write_adoption(repo / ADOPTION_PATH, record)
+    remove_tree(stage)
+    remove_tree(repo / WORKING_PATH)
+    return False
+
+
+async def _verify_adoption(
+    repo: Path,
+    origin: str,
+    candidate: Candidate,
+    provenance: OfficialProvenance,
+    record: dict,
+    model_override: str | None,
+    agent_settings: dict[str, AgentSettings],
+    hardware: str,
+    hardware_mode: str,
+    usages: list[PhaseUsage],
+) -> bool:
+    stage = repo / ".replicator" / "adoption_verification"
+    try:
+        stage = _seed_verification_repo(
+            repo,
+            repo / WORKING_PATH,
+            candidate,
+            origin,
+            provenance,
+            record,
+            hardware_mode,
+        )
+        passed, verification_usages = await _verify_and_repair(
+            stage, model_override, agent_settings, hardware
+        )
+    except Exception as exc:
+        return _discard_adoption(repo, stage, record, f"adoption verification error: {exc}")
+    usages.extend(verification_usages)
+    if not passed:
+        return _discard_adoption(
+            repo, stage, record, "adopted implementation failed bounded verification repairs"
+        )
+
+    cleaner_settings = _model(CLEANER, model_override, agent_settings)
+    try:
+        usages.append(
+            await run_agent(
+                CLEANER,
+                stage,
+                cleaner_settings.model,
+                hardware,
+                reasoning_effort=cleaner_settings.reasoning_effort,
+            )
+        )
+    except Exception as exc:
+        return _discard_adoption(repo, stage, record, f"adoption cleanup error: {exc}")
+    changes = source_changes(repo / REFERENCE_PATH, stage / "official")
+    post_repair_source = [
+        path
+        for path in changes
+        if path not in record.get("environment_changes", [])
+        and path not in record.get("adapters", [])
+        and path != candidate.result_path
+    ]
+    final_origin = "official_patched" if post_repair_source else origin
+    allowed, patch_failure = validate_stage_changes(
+        "official_patched", repo / REFERENCE_PATH, stage / "official", candidate
+    )
+    if not allowed:
+        return _discard_adoption(
+            repo, stage, record, f"verification repair rejected: {patch_failure}"
+        )
+    record["source_modifications"] = sorted(post_repair_source)
+    record["source_patch"] = source_patch(
+        repo / REFERENCE_PATH, stage / "official", {candidate.result_path}
+    )
+    record["selected_origin"] = final_origin
+    modifications = [
+        *record.get("environment_changes", []),
+        *record.get("adapters", []),
+        *record.get("source_modifications", []),
+    ]
+    try:
+        _mark_manifest_verified(stage, final_origin, modifications)
+        stable, failure = _run_stable_runner(stage)
+    except Exception as exc:
+        return _discard_adoption(repo, stage, record, f"stable runner setup failed: {exc}")
+    if not stable:
+        return _discard_adoption(
+            repo, stage, record, f"stable runner verification failed: {failure}"
+        )
+
+    write_adoption(repo / ADOPTION_PATH, record)
+    _promote_verification_repo(stage, repo)
+    remove_tree(stage)
+    remove_tree(repo / WORKING_PATH)
+    return True
+
+
 async def run_pipeline(
     repo: Path,
     model_override: str | None = None,
@@ -432,18 +875,20 @@ async def run_pipeline(
     instructions: str = "",
     gpu: bool = False,
     auto_approve: bool = False,
+    strategy: str = "reuse-first",
 ) -> None:
     """Run the replication pipeline over ``repo``.
 
-    Flow: plan → (human checkpoint) → code → verify-and-repair → clean. The cleaner
-    only runs over an implementation that passed the judging phases; if repair cannot
-    make it pass, the pipeline stops and reports the outstanding failures honestly.
+    Flow: plan → checkpoint → bounded official-code adoption → verify-and-repair →
+    clean. If adoption is unavailable or fails, the existing scratch coder path runs.
 
     ``gpu=True`` activates GPU mode: the hardware profile injected into every phase's
     system prompt switches from CPU_PROFILE to GPU_PROFILE, steering the planner toward
     ambitious paper-scale default configs plus a separate reduced verification run.
     """
     print(f"\nBaseline replicator → {repo}")
+    if strategy not in {"reuse-first", "scratch"}:
+        raise ValueError("strategy must be 'reuse-first' or 'scratch'")
     all_usages: list[PhaseUsage] = []
     agent_settings = agent_settings or {}
 
@@ -475,13 +920,43 @@ async def run_pipeline(
         sys.exit(0)
 
     code_url = _read_code_url(repo)
-    if code_url:
-        ref_dir = repo / ".replicator" / "reference_code"
-        result = clone_reference_code(code_url, ref_dir)
-        if result:
-            print(f"Ref:   cloned {code_url} → {ref_dir.relative_to(repo)}")
+    provenance: OfficialProvenance | None = None
+    adoption_record: dict
+    if strategy == "reuse-first":
+        origin, candidate, provenance, adoption_record = await _attempt_official_code(
+            repo,
+            code_url,
+            model_override,
+            agent_settings,
+            hardware,
+            all_usages,
+        )
+        if origin and candidate and provenance:
+            adopted = await _verify_adoption(
+                repo,
+                origin,
+                candidate,
+                provenance,
+                adoption_record,
+                model_override,
+                agent_settings,
+                hardware,
+                "gpu" if gpu else "cpu",
+                all_usages,
+            )
+            if adopted:
+                print(f"\n✅ Done. Adopted official baseline is in {repo}.")
+                _print_usage_summary(all_usages)
+                return
+            print("\n↪ Official code did not pass verification; starting clean scratch fallback.")
         else:
-            print(f"Ref:   could not clone {code_url} (skipping reference)")
+            print("\n↪ Official code was unavailable or unusable; starting scratch fallback.")
+    else:
+        if code_url:
+            provenance = acquire_official_code(code_url, repo / REFERENCE_PATH)
+        adoption_record = new_adoption_record(provenance, strategy="scratch")
+        adoption_record["selected_origin"] = "reimplemented"
+        write_adoption(repo / ADOPTION_PATH, adoption_record)
 
     reference = _reference_note(repo)
     coder_phases = _parse_coder_phases(repo)
@@ -514,6 +989,11 @@ async def run_pipeline(
         if not is_final:
             _syntax_check(repo)
 
+    manifest = scratch_manifest(repo, "gpu" if gpu else "cpu", provenance=provenance)
+    write_manifest(repo, manifest)
+    install_runner(repo)
+    (repo / "run-spec.json").write_text("{}\n")
+
     passed, vr_usages = await _verify_and_repair(repo, model_override, agent_settings, hardware)
     all_usages.extend(vr_usages)
 
@@ -536,5 +1016,14 @@ async def run_pipeline(
             reasoning_effort=cleaner_settings.reasoning_effort,
         )
     )
+    _mark_manifest_verified(repo)
+    stable, failure = _run_stable_runner(repo)
+    if not stable:
+        _mark_manifest_pending(repo)
+        print(f"\n⚠️  Stable runner verification failed: {failure}")
+        _print_usage_summary(all_usages)
+        sys.exit(1)
+    adoption_record["selected_origin"] = "reimplemented"
+    write_adoption(repo / ADOPTION_PATH, adoption_record)
     print(f"\n✅ Done. Replicated baseline is in {repo} (see README.md and REPORT.md).")
     _print_usage_summary(all_usages)

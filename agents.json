@@ -1,6 +1,10 @@
 {
   "planner": {"model": "gpt-5.6-sol", "reasoning_effort": "high"},
   "reviser": {"model": "gpt-5.6-sol", "reasoning_effort": "medium"},
+  "adoption_inspector": {"model": "gpt-5.6-terra", "reasoning_effort": "medium"},
+  "environment_fixer": {"model": "gpt-5.6-sol", "reasoning_effort": "high"},
+  "adapter": {"model": "gpt-5.6-sol", "reasoning_effort": "high"},
+  "source_patcher": {"model": "gpt-5.6-sol", "reasoning_effort": "high"},
   "coder": {"model": "gpt-5.6-sol", "reasoning_effort": "high"},
   "tester": {"model": "gpt-5.6-terra", "reasoning_effort": "high"},
   "benchmarker": {"model": "gpt-5.6-terra", "reasoning_effort": "medium"},

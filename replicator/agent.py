@@ -14,7 +14,19 @@ from .phases import Phase
 DEFAULT_MODEL = "gpt-5.6-sol"
 _LOG_DIR_NAME = ".replicator/logs"
 _AGENT_NAMES = frozenset(
-    {"planner", "reviser", "coder", "tester", "benchmarker", "repair", "cleaner"}
+    {
+        "planner",
+        "reviser",
+        "adoption_inspector",
+        "environment_fixer",
+        "adapter",
+        "source_patcher",
+        "coder",
+        "tester",
+        "benchmarker",
+        "repair",
+        "cleaner",
+    }
 )
 
 

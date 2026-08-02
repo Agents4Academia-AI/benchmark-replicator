@@ -7,9 +7,10 @@
 Ever opened a paper's codebase to use, extend, or compare against, and given up
 because of how rough, undocumented, or bitrotted it is?
 
-Point this agent at a link to the paper PDF and it builds a clean, minimal,
-modular implementation of the method &mdash; code you can actually read, run, and
-build on, plus the experiments to reproduce the paper's key results.
+Point this tool at a paper PDF and it acquires a validated baseline. It prefers the
+authors' official implementation, escalating only from an unchanged run to environment
+repair, a thin adapter, and a minimal patch. If reuse cannot be verified, it builds the
+existing clean scratch reimplementation instead.
 
 ## Demo
 
@@ -55,6 +56,7 @@ Options:
 --instructions TEXT|FILE extra instructions for the planner: literal text or a path to a file
 --yes, -y                auto-approve the plan and run without stopping at the human checkpoint
 --gpu                    GPU mode: ships ambitious paper-scale parameters; must be run inside a GPU allocation
+--strategy STRATEGY      reuse-first (default) or scratch
 ```
 
 Use `--instructions` to steer what the planner focuses on before it writes `PLAN.md`:
@@ -80,8 +82,9 @@ replicate https://arxiv.org/abs/1706.03762 --agent-config ./agents.json
 }
 ```
 
-Valid agent names are `planner`, `reviser`, `coder`, `tester`, `benchmarker`, `repair`, and
-`cleaner`. See [`agents.json`](agents.json) for every entry.
+Valid agent names are `planner`, `reviser`, `adoption_inspector`, `environment_fixer`,
+`adapter`, `source_patcher`, `coder`, `tester`, `benchmarker`, `repair`, and `cleaner`.
+See [`agents.json`](agents.json) for example settings.
 
 > **What to expect:** a full run drives several Codex phases and can take from
 > tens of minutes to about an hour. The pipeline pauses for your approval of
@@ -89,23 +92,31 @@ Valid agent names are `planner`, `reviser`, `coder`, `tester`, `benchmarker`, `r
 > plan looks wrong.
 
 The generated baseline lands in the output directory &mdash; a standalone repo
-with its own `README.md`, `PLAN.md`, `REPORT.md`, source, and tests. The
+with its own `README.md`, `PLAN.md`, `REPORT.md`, source, tests, and validated
+`baseline.json`. Every successful baseline has one stable invocation:
+
+```bash
+bash run.sh --spec run-spec.json --output run-result.json
+```
+
+The empty checked-in `run-spec.json` reproduces the verified run. Supported overrides are
+listed in `baseline.json`; unknown overrides fail instead of being silently ignored. The
+normalized result includes status, seed, numeric/boolean metrics, runtime, and implementation
+origin, while `.replicator/results.json` remains available for compatibility. The
 pipeline runs the **default** config (the real experiment within budget, roughly
 tens of minutes to about an hour on a modern CPU); the repo also ships an
 optional **scale-up** config for paper-scale runs.
 
 ## How it works
 
-A deterministic Python orchestrator (`replicator/pipeline.py`) runs a fixed
-sequence of scoped Codex agents &mdash; planner, coder, tester, benchmarker,
-repair, and cleaner &mdash; that share state through files in the generated
-repo. Each phase is an isolated Codex SDK thread, with the generated repository
-as its working directory and a workspace-write sandbox. After planning, the
+A deterministic Python orchestrator (`replicator/pipeline.py`) owns the fixed adoption
+order, attempt bounds, fallback decision, judging, and repair loop. Agents inspect or make
+one scoped class of change; they do not choose control flow. Each phase uses a workspace-write
+execution boundary. This is a path guard, not a security sandbox, and adopted commands are
+recorded as local execution. After planning, the
 pipeline **pauses for your approval** of `PLAN.md`
 before any code is written. Pass `--yes` to skip this checkpoint for unattended
 runs (e.g. batch jobs on an HPC cluster).
-
-![Pipeline overview: paper → planner → human checkpoint → coder → verify-and-repair loop → cleaner](docs/pipeline.png)
 
 See **[docs/how_it_works.md](docs/how_it_works.md)** for the full pipeline, the
 verify-and-repair loop, and an annotated diagram.

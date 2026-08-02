@@ -28,7 +28,7 @@ from .pipeline import run_pipeline
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="replicate",
-        description="Turn a paper into a clean, minimal baseline repo.",
+        description="Acquire a validated paper baseline, reusing official code first.",
     )
     parser.add_argument(
         "url",
@@ -75,6 +75,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=False,
         help="Auto-approve the plan and run the full pipeline without stopping at the "
         "human checkpoint. Useful for unattended/batch runs (e.g. HPC jobs).",
+    )
+    parser.add_argument(
+        "--strategy",
+        choices=("reuse-first", "scratch"),
+        default="reuse-first",
+        help="Baseline acquisition strategy (default: reuse-first). 'scratch' preserves "
+        "the original plan-and-reimplement behavior.",
     )
     return parser.parse_args(argv)
 
@@ -137,6 +144,7 @@ def main(argv: list[str] | None = None) -> None:
         print("Mode:  GPU (full + verification configs)")
     if args.yes:
         print("Mode:  auto-approve (no checkpoint)")
+    print(f"Strategy: {args.strategy}")
     asyncio.run(
         run_pipeline(
             repo,
@@ -145,6 +153,7 @@ def main(argv: list[str] | None = None) -> None:
             instructions=instructions,
             gpu=args.gpu,
             auto_approve=args.yes,
+            strategy=args.strategy,
         )
     )
 

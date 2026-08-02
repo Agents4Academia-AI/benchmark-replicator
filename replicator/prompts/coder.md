@@ -95,6 +95,13 @@ wrong way). These are the cheapest bugs to catch and the most common to miss.
    python train.py
    ```
    Users should be able to clone the repo and run `bash run.sh` to reproduce the result.
+   Also write `.replicator/execution.json` so Python can replace this bootstrap script with
+   the stable runner contract after coding. Use schema version `"1"` and include:
+   `method_name`, an argv-array `command` for the **verified** run, `result` with relative
+   `path` and `format` (`json` or `stdout_json`), `metric_map`, `default_seed`, and
+   `supported_overrides`. Each supported override maps to its real CLI `flag` and `type`
+   (`integer`, `number`, `string`, or `boolean`), with optional `choices`. Do not advertise
+   an override the entry point does not apply. The command must not be `bash run.sh`.
 6. Do a quick verification run yourself in the shell using the **fast test** config (e.g. a
    handful of steps) to confirm the code executes and the method moves in the right
    direction. Fix anything that crashes. Keep these iterations fast — save the full default
@@ -140,7 +147,8 @@ them, classify it:
 - Do **not** touch `PLAN.md`, `paper/`, or the planner's `.replicator/criteria.json`. Your
   entry point writes `.replicator/results.json` at runtime — that is expected — but do not
   edit other files under `.replicator/` by hand. The one exception is
-  `.replicator/coder-progress.md`: you write and update it by hand as the phase handoff
+  `.replicator/coder-progress.md` and `.replicator/execution.json`: you write and update them
+  as phase handoff and runner-contract files
   file (see *Phased implementation* above).
 
 When your phase's scope is implemented (and the full implementation runs end-to-end on

@@ -1,7 +1,7 @@
 [project]
 name = "benchmark-replicator"
 version = "0.1.0"
-description = "Turn an arXiv paper or any PDF into a clean, minimal, modular implementation using scoped Codex agents."
+description = "Acquire a validated research baseline by reusing official code first and reimplementing only as fallback."
 authors = [
     { name = "Sahel Iqbal", email = "sahel13miqbal@proton.me" },
     { name = "Arya Akhavan", email = "aryaakhavanf@gmail.com" },

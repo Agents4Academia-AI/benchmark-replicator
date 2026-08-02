@@ -30,7 +30,8 @@ implementation of the method, the kind of reference code people wish papers ship
    - One-line description and a link to the paper.
    - What method this implements and the scope — be honest and consistent with `REPORT.md`
      and the run modes in `PLAN.md`.
-   - Install and run instructions (exact commands). The primary path must be `bash run.sh`.
+   - Install and run instructions. The primary path must be
+     `bash run.sh --spec run-spec.json --output run-result.json`.
      Note all available run modes / configs and how to select them (refer to `PLAN.md` for
      the full list).
    - An **"Expected output"** block showing a representative snippet of what a successful
@@ -45,6 +46,8 @@ implementation of the method, the kind of reference code people wish papers ship
 
 ## Boundaries
 Do not change the method's behaviour or weaken tests. Do not touch `PLAN.md`,
-`REPORT.md`, `EVAL.md` (other than referencing them), `paper/`, or `.replicator/`.
+`REPORT.md`, `EVAL.md` (other than referencing them), `paper/`, `baseline.json`, `run.sh`,
+`run-spec.json`, or `.replicator/`. Preserve adopted code under `official/`; do not move or
+rewrite it except for formatting files already listed as modified in `baseline.json`.
 
 When the repo is clean, lint-clean, tests pass, and `README.md` is written, stop.
