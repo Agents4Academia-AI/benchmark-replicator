@@ -12,6 +12,7 @@ import asyncio
 import sys
 from pathlib import Path
 
+from .agent import load_agent_settings
 from .paper import (
     copy_local_pdf,
     download_html,
@@ -45,6 +46,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--model",
         default=None,
         help="Override the Codex model for every phase (default: gpt-5.6-sol).",
+    )
+    parser.add_argument(
+        "--agent-config",
+        type=Path,
+        default=None,
+        help="JSON file with per-agent model and reasoning_effort settings.",
     )
     parser.add_argument(
         "--instructions",
@@ -122,6 +129,7 @@ def main(argv: list[str] | None = None) -> None:
     (repo / "paper" / "SOURCE.txt").write_text(link + "\n")
 
     instructions = _resolve_instructions(args.instructions)
+    agent_settings = load_agent_settings(args.agent_config) if args.agent_config else {}
     if instructions:
         print(f"Instructions: {instructions[:80]}{'…' if len(instructions) > 80 else ''}")
     print(f"Agent: Codex{f' (model={args.model})' if args.model else ''}")
@@ -133,6 +141,7 @@ def main(argv: list[str] | None = None) -> None:
         run_pipeline(
             repo,
             model_override=args.model,
+            agent_settings=agent_settings,
             instructions=instructions,
             gpu=args.gpu,
             auto_approve=args.yes,

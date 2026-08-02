@@ -1,0 +1,9 @@
+{
+  "planner": {"model": "gpt-5.6-sol", "reasoning_effort": "high"},
+  "reviser": {"model": "gpt-5.6-sol", "reasoning_effort": "medium"},
+  "coder": {"model": "gpt-5.6-sol", "reasoning_effort": "high"},
+  "tester": {"model": "gpt-5.6-terra", "reasoning_effort": "high"},
+  "benchmarker": {"model": "gpt-5.6-terra", "reasoning_effort": "medium"},
+  "repair": {"model": "gpt-5.6-sol", "reasoning_effort": "high"},
+  "cleaner": {"model": "gpt-5.6-terra", "reasoning_effort": "medium"}
+}

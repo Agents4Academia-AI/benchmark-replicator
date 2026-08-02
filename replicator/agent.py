@@ -13,11 +13,64 @@ from .phases import Phase
 
 DEFAULT_MODEL = "gpt-5.6-sol"
 _LOG_DIR_NAME = ".replicator/logs"
+_AGENT_NAMES = frozenset(
+    {"planner", "reviser", "coder", "tester", "benchmarker", "repair", "cleaner"}
+)
 
 
 def resolve_model(_phase_name: str, override: str | None) -> str:
     """Return the requested Codex model, or the branch-wide default."""
     return override or DEFAULT_MODEL
+
+
+@dataclass(frozen=True)
+class AgentSettings:
+    """Optional per-agent model settings loaded from a JSON configuration file."""
+
+    model: str | None = None
+    reasoning_effort: str | None = None
+
+
+def load_agent_settings(path: Path) -> dict[str, AgentSettings]:
+    """Load and validate the per-agent model settings JSON file."""
+    try:
+        data = json.loads(path.read_text())
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid agent settings JSON in {path}: {exc}") from exc
+
+    if not isinstance(data, dict):
+        raise ValueError("agent settings must be a JSON object keyed by agent name")
+
+    settings: dict[str, AgentSettings] = {}
+    for name, values in data.items():
+        if name not in _AGENT_NAMES:
+            valid = ", ".join(sorted(_AGENT_NAMES))
+            raise ValueError(f"unknown agent {name!r}; expected one of: {valid}")
+        if not isinstance(values, dict):
+            raise ValueError(f"settings for {name!r} must be a JSON object")
+        unknown = set(values) - {"model", "reasoning_effort"}
+        if unknown:
+            raise ValueError(f"unknown settings for {name!r}: {', '.join(sorted(unknown))}")
+        model = values.get("model")
+        effort = values.get("reasoning_effort")
+        if model is not None and (not isinstance(model, str) or not model.strip()):
+            raise ValueError(f"{name}.model must be a non-empty string")
+        if effort is not None and (not isinstance(effort, str) or not effort.strip()):
+            raise ValueError(f"{name}.reasoning_effort must be a non-empty string")
+        settings[name] = AgentSettings(model=model, reasoning_effort=effort)
+
+    return settings
+
+
+def resolve_agent_settings(
+    phase_name: str, model_override: str | None, settings: dict[str, AgentSettings]
+) -> AgentSettings:
+    """Resolve one phase's settings, with ``--model`` taking precedence."""
+    configured = settings.get(phase_name, AgentSettings())
+    return AgentSettings(
+        model=resolve_model(phase_name, model_override or configured.model),
+        reasoning_effort=configured.reasoning_effort,
+    )
 
 
 @dataclass
@@ -88,6 +141,13 @@ async def _start_thread(codex: AsyncCodex, phase: Phase, repo: Path, model: str,
     return await codex.thread_start(**_thread_options(phase, repo, model, hardware))
 
 
+async def _run_thread(thread, prompt: str, reasoning_effort: str | None):
+    """Run a turn, setting effort only when it was explicitly configured."""
+    if reasoning_effort is None:
+        return await thread.run(prompt)
+    return await thread.run(prompt, effort=reasoning_effort)
+
+
 async def run_agent(
     phase: Phase,
     repo: Path,
@@ -95,6 +155,7 @@ async def run_agent(
     hardware: str,
     *,
     label: str | None = None,
+    reasoning_effort: str | None = None,
     **task_kwargs: str,
 ) -> PhaseUsage:
     """Run one isolated Codex thread to completion."""
@@ -103,14 +164,15 @@ async def run_agent(
     log_path.parent.mkdir(parents=True, exist_ok=True)
     usage = PhaseUsage(label=label, model=model)
 
-    print(f"\n{'=' * 70}\n▶  {label.upper()}  (model: {model})\n{'=' * 70}")
+    effort = f", effort: {reasoning_effort}" if reasoning_effort else ""
+    print(f"\n{'=' * 70}\n▶  {label.upper()}  (model: {model}{effort})\n{'=' * 70}")
     task = phase.task.format(**task_kwargs)
 
     with log_path.open("w", buffering=1) as log:
         log.write(f"[user] {task}\n")
         async with AsyncCodex() as codex:
             thread = await _start_thread(codex, phase, repo, model, hardware)
-            result = await thread.run(task)
+            result = await _run_thread(thread, task, reasoning_effort)
         _record_result(result, label, log, usage)
 
     return usage
@@ -123,6 +185,7 @@ async def run_chat_agent(
     hardware: str,
     *,
     paper_sources: str = "",
+    reasoning_effort: str | None = None,
 ) -> PhaseUsage:
     """Drive a stateful Codex thread for interactive plan revision."""
     label = phase.name
@@ -130,7 +193,8 @@ async def run_chat_agent(
     log_path.parent.mkdir(parents=True, exist_ok=True)
     usage = PhaseUsage(label=label, model=model)
 
-    print(f"\n{'=' * 70}\n▶  {label.upper()}  (model: {model})\n{'=' * 70}")
+    effort = f", effort: {reasoning_effort}" if reasoning_effort else ""
+    print(f"\n{'=' * 70}\n▶  {label.upper()}  (model: {model}{effort})\n{'=' * 70}")
     print(
         "  Chat to revise PLAN.md and criteria.json. Type a request and press Enter;\n"
         "  the agent edits the plan and reports back. Type 'done' (or an empty line)\n"
@@ -155,7 +219,7 @@ async def run_chat_agent(
                 prompt = first_prefix + message if first else message
                 first = False
                 log.write(f"\n[user] {message}\n")
-                result = await thread.run(prompt)
+                result = await _run_thread(thread, prompt, reasoning_effort)
                 _record_result(result, label, log, usage)
 
     return usage

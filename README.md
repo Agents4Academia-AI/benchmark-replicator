@@ -51,6 +51,7 @@ Options:
 ```
 --out DIR                output directory (default: replications/<arxiv-id> or replications/pdf-<hash>)
 --model MODEL            override the Codex model for all phases (default: gpt-5.6-sol)
+--agent-config FILE      JSON file with per-agent model and reasoning-effort settings
 --instructions TEXT|FILE extra instructions for the planner: literal text or a path to a file
 --yes, -y                auto-approve the plan and run without stopping at the human checkpoint
 --gpu                    GPU mode: ships ambitious paper-scale parameters; must be run inside a GPU allocation
@@ -62,6 +63,25 @@ Use `--instructions` to steer what the planner focuses on before it writes `PLAN
 replicate https://arxiv.org/abs/1706.03762 --instructions "focus only on scaled dot-product attention, skip multi-head"
 replicate https://arxiv.org/abs/1706.03762 --instructions ./my_notes.md
 ```
+
+Use `--agent-config` to set a model and/or reasoning effort for individual agents. Omitted
+fields retain the default model (`gpt-5.6-sol`) and SDK reasoning effort. `--model` still
+overrides every configured model, but leaves each configured reasoning effort intact.
+
+```bash
+replicate https://arxiv.org/abs/1706.03762 --agent-config ./agents.json
+```
+
+```json
+{
+  "planner": {"model": "gpt-5.6-sol", "reasoning_effort": "high"},
+  "coder": {"model": "gpt-5.6-sol", "reasoning_effort": "xhigh"},
+  "tester": {"reasoning_effort": "medium"}
+}
+```
+
+Valid agent names are `planner`, `reviser`, `coder`, `tester`, `benchmarker`, `repair`, and
+`cleaner`. See [`agents.json`](agents.json) for every entry.
 
 > **What to expect:** a full run drives several Codex phases and can take from
 > tens of minutes to about an hour. The pipeline pauses for your approval of

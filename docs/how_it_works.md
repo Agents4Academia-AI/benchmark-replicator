@@ -122,7 +122,8 @@ a local PDF path. `paper.py` (standard library only) resolves the source and pop
 
 The source link is recorded in `paper/SOURCE.txt`. Optional `--instructions` (literal text
 or a file path) are passed through to the planner. `--model` overrides every phase's Codex
-model. The CLI then hands the prepared repo to `run_pipeline` (`pipeline.py`).
+model. `--agent-config` accepts a JSON file with a model and/or reasoning effort for each
+named phase. The CLI then hands the prepared repo to `run_pipeline` (`pipeline.py`).
 
 ## How each phase runs
 
@@ -140,8 +141,9 @@ escalations, allows network access for dependency and dataset downloads, and doe
 project `AGENTS.md` files. The orchestrator writes the completed turn items to
 `.replicator/logs/<phase>.log` and reports SDK token usage at the end.
 
-**Default model** (`agent.py`): every phase uses `gpt-5.6-sol`; `--model` overrides every
-phase with one Codex model id.
+**Default model** (`agent.py`): every phase uses `gpt-5.6-sol` with the SDK's default reasoning
+effort. `--model` overrides every phase with one Codex model id. `--agent-config` can choose a
+model and/or reasoning effort separately for each phase.
 
 ## The phases in detail
 

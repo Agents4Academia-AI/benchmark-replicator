@@ -16,6 +16,7 @@ def test_defaults():
     assert args.gpu is False
     assert args.out is None
     assert args.model is None
+    assert args.agent_config is None
 
 
 def test_flags_parse():
@@ -24,6 +25,8 @@ def test_flags_parse():
             "paper.pdf",
             "--model",
             "gpt-5.6-sol",
+            "--agent-config",
+            "agents.json",
             "-y",
             "--gpu",
             "--out",
@@ -31,6 +34,7 @@ def test_flags_parse():
         ]
     )
     assert args.model == "gpt-5.6-sol"
+    assert args.agent_config == Path("agents.json")
     assert args.yes is True
     assert args.gpu is True
     assert args.out == Path("myout")

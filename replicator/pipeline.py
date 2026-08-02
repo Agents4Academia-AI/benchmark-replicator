@@ -15,7 +15,7 @@ import re
 import sys
 from pathlib import Path
 
-from .agent import PhaseUsage, resolve_model, run_agent, run_chat_agent
+from .agent import AgentSettings, PhaseUsage, resolve_agent_settings, run_agent, run_chat_agent
 from .criteria import mechanical_failures
 from .paper import clone_reference_code
 from .phases import (
@@ -161,6 +161,7 @@ def _decisions_needed(plan_text: str) -> str:
 async def _checkpoint(
     repo: Path,
     model_override: str | None,
+    agent_settings: dict[str, AgentSettings],
     usages: list[PhaseUsage],
     hardware: str,
     auto_approve: bool = False,
@@ -196,21 +197,25 @@ async def _checkpoint(
         if choice in ("y", "yes"):
             return True
         if choice in ("c", "chat"):
+            reviser_settings = _model(REVISER, model_override, agent_settings)
             usages.append(
                 await run_chat_agent(
                     REVISER,
                     repo,
-                    _model(REVISER, model_override),
+                    reviser_settings.model,
                     hardware,
                     paper_sources=_paper_sources(repo),
+                    reasoning_effort=reviser_settings.reasoning_effort,
                 )
             )
             continue
         return False
 
 
-def _model(phase: Phase, override: str | None) -> str:
-    return resolve_model(phase.name, override)
+def _model(
+    phase: Phase, override: str | None, agent_settings: dict[str, AgentSettings]
+) -> AgentSettings:
+    return resolve_agent_settings(phase.name, override, agent_settings)
 
 
 def _apply_mechanical_check(repo: Path, verdict: Verdict) -> Verdict:
@@ -234,7 +239,10 @@ def _apply_mechanical_check(repo: Path, verdict: Verdict) -> Verdict:
 
 
 async def _verify_and_repair(
-    repo: Path, model_override: str | None, hardware: str
+    repo: Path,
+    model_override: str | None,
+    agent_settings: dict[str, AgentSettings],
+    hardware: str,
 ) -> tuple[bool, list[PhaseUsage]]:
     """Run the judging phases; on a failure verdict, repair and re-verify.
 
@@ -261,12 +269,14 @@ async def _verify_and_repair(
         defer_tester = False
         for judge in judges:
             clear_verdict(repo)
+            settings = _model(judge, model_override, agent_settings)
             usages.append(
                 await run_agent(
                     judge,
                     repo,
-                    _model(judge, model_override),
+                    settings.model,
                     hardware,
+                    reasoning_effort=settings.reasoning_effort,
                     reference=reference,
                 )
             )
@@ -293,13 +303,15 @@ async def _verify_and_repair(
         print(
             f"\n🔧 Repair attempt {attempts}/{_MAX_REPAIR_ATTEMPTS} (triggered by {failure.phase})."
         )
+        repair_settings = _model(REPAIR, model_override, agent_settings)
         usages.append(
             await run_agent(
                 REPAIR,
                 repo,
-                _model(REPAIR, model_override),
+                repair_settings.model,
                 hardware,
                 label=f"repair-{attempts}",
+                reasoning_effort=repair_settings.reasoning_effort,
                 pdf=_paper_pdf(repo),
                 failures=format_failures([failure]),
                 reference=reference,
@@ -416,6 +428,7 @@ def _syntax_check(repo: Path) -> None:
 async def run_pipeline(
     repo: Path,
     model_override: str | None = None,
+    agent_settings: dict[str, AgentSettings] | None = None,
     instructions: str = "",
     gpu: bool = False,
     auto_approve: bool = False,
@@ -432,6 +445,7 @@ async def run_pipeline(
     """
     print(f"\nBaseline replicator → {repo}")
     all_usages: list[PhaseUsage] = []
+    agent_settings = agent_settings or {}
 
     hardware = hardware_profile(gpu)
 
@@ -441,17 +455,21 @@ async def run_pipeline(
         if instructions.strip()
         else ""
     )
+    planner_settings = _model(PLANNER, model_override, agent_settings)
     all_usages.append(
         await run_agent(
             PLANNER,
             repo,
-            _model(PLANNER, model_override),
+            planner_settings.model,
             hardware,
+            reasoning_effort=planner_settings.reasoning_effort,
             sources=_paper_sources(repo),
             instructions=instructions_block,
         )
     )
-    if not await _checkpoint(repo, model_override, all_usages, hardware, auto_approve):
+    if not await _checkpoint(
+        repo, model_override, agent_settings, all_usages, hardware, auto_approve
+    ):
         print("\n✋ Stopped at planning checkpoint. The plan is in PLAN.md.")
         _print_usage_summary(all_usages)
         sys.exit(0)
@@ -480,13 +498,15 @@ async def run_pipeline(
             n, total, phase_title, phase_desc, is_final=is_final
         )
         label = "coder" if total == 1 else f"coder-{n}"
+        coder_settings = _model(CODER, model_override, agent_settings)
         all_usages.append(
             await run_agent(
                 CODER,
                 repo,
-                _model(CODER, model_override),
+                coder_settings.model,
                 hardware,
                 label=label,
+                reasoning_effort=coder_settings.reasoning_effort,
                 reference=reference,
                 phase_instruction=phase_instruction,
             )
@@ -494,7 +514,7 @@ async def run_pipeline(
         if not is_final:
             _syntax_check(repo)
 
-    passed, vr_usages = await _verify_and_repair(repo, model_override, hardware)
+    passed, vr_usages = await _verify_and_repair(repo, model_override, agent_settings, hardware)
     all_usages.extend(vr_usages)
 
     if not passed:
@@ -506,6 +526,15 @@ async def run_pipeline(
         _print_usage_summary(all_usages)
         sys.exit(1)
 
-    all_usages.append(await run_agent(CLEANER, repo, _model(CLEANER, model_override), hardware))
+    cleaner_settings = _model(CLEANER, model_override, agent_settings)
+    all_usages.append(
+        await run_agent(
+            CLEANER,
+            repo,
+            cleaner_settings.model,
+            hardware,
+            reasoning_effort=cleaner_settings.reasoning_effort,
+        )
+    )
     print(f"\n✅ Done. Replicated baseline is in {repo} (see README.md and REPORT.md).")
     _print_usage_summary(all_usages)
