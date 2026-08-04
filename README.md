@@ -57,6 +57,8 @@ Options:
 --yes, -y                auto-approve the plan and run without stopping at the human checkpoint
 --gpu                    GPU mode: ships ambitious paper-scale parameters; must be run inside a GPU allocation
 --strategy STRATEGY      reuse-first (default) or scratch
+--unsafe-local-official-code
+                         execute official repository setup/run commands on this host (unsafe)
 ```
 
 Use `--instructions` to steer what the planner focuses on before it writes `PLAN.md`:
@@ -99,7 +101,8 @@ with its own `README.md`, `PLAN.md`, `REPORT.md`, source, tests, and validated
 bash run.sh --spec run-spec.json --output run-result.json
 ```
 
-The empty checked-in `run-spec.json` reproduces the verified run. Supported overrides are
+The empty checked-in `run-spec.json` reproduces the verified run, and `bash run.sh` uses those
+same default paths. Supported overrides are
 listed in `baseline.json`; unknown overrides fail instead of being silently ignored. The
 normalized result includes status, seed, numeric/boolean metrics, runtime, and implementation
 origin, while `.replicator/results.json` remains available for compatibility. The
@@ -112,8 +115,10 @@ optional **scale-up** config for paper-scale runs.
 A deterministic Python orchestrator (`replicator/pipeline.py`) owns the fixed adoption
 order, attempt bounds, fallback decision, judging, and repair loop. Agents inspect or make
 one scoped class of change; they do not choose control flow. Each phase uses a workspace-write
-execution boundary. This is a path guard, not a security sandbox, and adopted commands are
-recorded as local execution. After planning, the
+execution boundary. This is a path guard, not a security sandbox, and adopted commands are not
+executed by default. To run official setup or entry-point commands directly on the host, pass
+`--unsafe-local-official-code`; otherwise reuse-first safely falls back to scratch until a
+sandbox backend is available. After planning, the
 pipeline **pauses for your approval** of `PLAN.md`
 before any code is written. Pass `--yes` to skip this checkpoint for unattended
 runs (e.g. batch jobs on an HPC cluster).

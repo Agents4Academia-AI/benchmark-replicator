@@ -18,6 +18,7 @@ def test_defaults():
     assert args.model is None
     assert args.agent_config is None
     assert args.strategy == "reuse-first"
+    assert args.unsafe_local_official_code is False
 
 
 def test_flags_parse():
@@ -34,6 +35,7 @@ def test_flags_parse():
             "myout",
             "--strategy",
             "scratch",
+            "--unsafe-local-official-code",
         ]
     )
     assert args.model == "gpt-5.6-sol"
@@ -42,6 +44,7 @@ def test_flags_parse():
     assert args.gpu is True
     assert args.out == Path("myout")
     assert args.strategy == "scratch"
+    assert args.unsafe_local_official_code is True
 
 
 def test_missing_url_errors():

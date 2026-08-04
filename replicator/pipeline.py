@@ -485,6 +485,8 @@ async def _attempt_official_code(
     agent_settings: dict[str, AgentSettings],
     hardware: str,
     usages: list[PhaseUsage],
+    *,
+    unsafe_local_official_code: bool = False,
 ) -> tuple[str | None, Candidate | None, OfficialProvenance | None, dict]:
     """Run the four fixed adoption levels, once each, on a disposable copy."""
     reference = repo / REFERENCE_PATH
@@ -497,7 +499,11 @@ async def _attempt_official_code(
         return None, None, None, record
 
     provenance = acquire_official_code(code_url, reference)
-    record = new_adoption_record(provenance, strategy="reuse-first")
+    record = new_adoption_record(
+        provenance,
+        strategy="reuse-first",
+        execution_local=unsafe_local_official_code,
+    )
     if provenance is None:
         record["failures"].append("official repository could not be retrieved")
         write_adoption(adoption_path, record)
@@ -507,6 +513,12 @@ async def _attempt_official_code(
         f"Official: preserved {code_url} at {REFERENCE_PATH} "
         f"({provenance.commit_sha[:12]}, license: {provenance.license})"
     )
+    if not unsafe_local_official_code:
+        record["failures"].append(
+            "official code was not executed: use --unsafe-local-official-code or configure a sandbox backend"
+        )
+        write_adoption(adoption_path, record)
+        return None, None, provenance, record
     make_working_copy(reference, working)
     context = working / ".replicator" / "context"
     context.mkdir(parents=True)
@@ -609,7 +621,12 @@ async def _attempt_official_code(
             write_adoption(adoption_path, record)
             continue
 
-        result = execute_candidate(candidate, working, _ADOPTION_TIMEOUT_SECONDS)
+        result = execute_candidate(
+            candidate,
+            working,
+            _ADOPTION_TIMEOUT_SECONDS,
+            unsafe_local=unsafe_local_official_code,
+        )
         attempt = {
             "stage": origin,
             "status": "succeeded" if result.succeeded else "failed",
@@ -617,6 +634,7 @@ async def _attempt_official_code(
             "returncode": result.returncode,
             "runtime_seconds": round(result.runtime_seconds, 3),
         }
+        attempt["setup_command"] = candidate.setup_command
         if result.failure:
             attempt["failure"] = result.failure
             record["failures"].append(result.failure)
@@ -666,11 +684,12 @@ def _seed_verification_repo(
             ".replicator", ".venv", "__pycache__", ".pytest_cache", ".ruff_cache"
         ),
     )
-    modifications = [
-        *record.get("environment_changes", []),
-        *record.get("adapters", []),
-        *record.get("source_modifications", []),
-    ]
+    modifications = {
+        "environment": record.get("environment_changes", []),
+        "adapters": record.get("adapters", []),
+        "source": record.get("source_modifications", []),
+        "source_patch": record.get("source_patch", ""),
+    }
     manifest = manifest_from_candidate(
         stage,
         candidate,
@@ -686,7 +705,7 @@ def _seed_verification_repo(
 
 
 def _mark_manifest_verified(
-    repo: Path, origin: str | None = None, modifications: list[str] | None = None
+    repo: Path, origin: str | None = None, modifications: dict[str, object] | None = None
 ) -> None:
     manifest = json.loads((repo / "baseline.json").read_text())
     manifest["status"] = "success"
@@ -846,11 +865,12 @@ async def _verify_adoption(
         repo / REFERENCE_PATH, stage / "official", {candidate.result_path}
     )
     record["selected_origin"] = final_origin
-    modifications = [
-        *record.get("environment_changes", []),
-        *record.get("adapters", []),
-        *record.get("source_modifications", []),
-    ]
+    modifications = {
+        "environment": record.get("environment_changes", []),
+        "adapters": record.get("adapters", []),
+        "source": record.get("source_modifications", []),
+        "source_patch": record.get("source_patch", ""),
+    }
     try:
         _mark_manifest_verified(stage, final_origin, modifications)
         stable, failure = _run_stable_runner(stage)
@@ -876,6 +896,7 @@ async def run_pipeline(
     gpu: bool = False,
     auto_approve: bool = False,
     strategy: str = "reuse-first",
+    unsafe_local_official_code: bool = False,
 ) -> None:
     """Run the replication pipeline over ``repo``.
 
@@ -930,6 +951,7 @@ async def run_pipeline(
             agent_settings,
             hardware,
             all_usages,
+            unsafe_local_official_code=unsafe_local_official_code,
         )
         if origin and candidate and provenance:
             adopted = await _verify_adoption(

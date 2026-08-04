@@ -99,7 +99,9 @@ wrong way). These are the cheapest bugs to catch and the most common to miss.
    the stable runner contract after coding. Use schema version `"1"` and include:
    `method_name`, an argv-array `command` for the **verified** run, `result` with relative
    `path` and `format` (`json` or `stdout_json`), `metric_map`, `default_seed`, and
-   `supported_overrides`. Each supported override maps to its real CLI `flag` and `type`
+`supported_overrides`, and an idempotent argv-array `setup_command` that performs the install
+from a fresh environment (for example `['python', '-m', 'pip', 'install', '-e', '.[dev]']`).
+Each supported override maps to its real CLI `flag` and `type`
    (`integer`, `number`, `string`, or `boolean`), with optional `choices`. Do not advertise
    an override the entry point does not apply. The command must not be `bash run.sh`.
 6. Do a quick verification run yourself in the shell using the **fast test** config (e.g. a

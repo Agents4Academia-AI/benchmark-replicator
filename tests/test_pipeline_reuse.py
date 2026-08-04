@@ -80,6 +80,7 @@ def _agent(
                     {
                         "schema_version": "1",
                         "method_name": "Official Fake",
+                        "setup_command": [],
                         "command": [sys.executable, "main.py"],
                         "result": {"path": "metrics.json", "format": "json"},
                         "metric_map": {"score": "score"},
@@ -99,6 +100,7 @@ def _agent(
                     {
                         "schema_version": "1",
                         "method_name": "Scratch Fake",
+                        "setup_command": [],
                         "command": [sys.executable, "scratch.py"],
                         "result": {"path": ".replicator/scratch-raw.json", "format": "json"},
                         "metric_map": {"score": "score"},
@@ -147,7 +149,7 @@ def test_no_official_code_uses_scratch_fallback(monkeypatch, tmp_path):
     calls: list[str] = []
     monkeypatch.setattr("replicator.pipeline.run_agent", _agent(None, calls))
 
-    asyncio.run(run_pipeline(repo, auto_approve=True))
+    asyncio.run(run_pipeline(repo, auto_approve=True, unsafe_local_official_code=True))
 
     manifest = json.loads((repo / "baseline.json").read_text())
     assert manifest["implementation_origin"] == "reimplemented"
@@ -162,15 +164,39 @@ def test_official_code_is_promoted_when_verification_passes(monkeypatch, tmp_pat
     _allow_fake_clone(monkeypatch)
     monkeypatch.setattr("replicator.pipeline.run_agent", _agent(str(source), calls))
 
-    asyncio.run(run_pipeline(repo, auto_approve=True))
+    asyncio.run(run_pipeline(repo, auto_approve=True, unsafe_local_official_code=True))
 
     manifest = json.loads((repo / "baseline.json").read_text())
     adoption = json.loads((repo / ".replicator" / "adoption.json").read_text())
     assert manifest["implementation_origin"] == "official_unmodified"
     assert manifest["commit_sha"] == adoption["official_code"]["commit_sha"]
+    assert manifest["license"] == adoption["official_code"]["license"] == "MIT"
+    assert manifest["retrieved_at"] == adoption["official_code"]["retrieved_at"]
+    assert manifest["modifications"] == {
+        "environment": [],
+        "adapters": [],
+        "source": [],
+        "source_patch": "",
+    }
     assert adoption["selected_origin"] == "official_unmodified"
     assert (repo / "official" / "main.py").exists()
     assert "coder" not in calls
+
+
+def test_official_code_requires_unsafe_local_opt_in(monkeypatch, tmp_path):
+    source = _fake_git_repo(tmp_path, succeeds=True)
+    repo = _prepare_output(tmp_path)
+    calls: list[str] = []
+    _allow_fake_clone(monkeypatch)
+    monkeypatch.setattr("replicator.pipeline.run_agent", _agent(str(source), calls))
+
+    asyncio.run(run_pipeline(repo, auto_approve=True))
+
+    adoption = json.loads((repo / ".replicator" / "adoption.json").read_text())
+    assert adoption["execution_local"] is False
+    assert "adoption_inspector" not in calls
+    assert "coder" in calls
+    assert any("not executed" in failure for failure in adoption["failures"])
 
 
 def test_all_adoption_attempts_fail_then_clean_scratch_fallback(monkeypatch, tmp_path):
@@ -180,7 +206,7 @@ def test_all_adoption_attempts_fail_then_clean_scratch_fallback(monkeypatch, tmp
     _allow_fake_clone(monkeypatch)
     monkeypatch.setattr("replicator.pipeline.run_agent", _agent(str(source), calls))
 
-    asyncio.run(run_pipeline(repo, auto_approve=True))
+    asyncio.run(run_pipeline(repo, auto_approve=True, unsafe_local_official_code=True))
 
     adoption = json.loads((repo / ".replicator" / "adoption.json").read_text())
     assert [attempt["stage"] for attempt in adoption["attempts"]] == [
@@ -205,7 +231,7 @@ def test_adopted_verification_failure_falls_back_without_contamination(monkeypat
         _agent(str(source), calls, fail_adopted_verification=True),
     )
 
-    asyncio.run(run_pipeline(repo, auto_approve=True))
+    asyncio.run(run_pipeline(repo, auto_approve=True, unsafe_local_official_code=True))
 
     manifest = json.loads((repo / "baseline.json").read_text())
     adoption = json.loads((repo / ".replicator" / "adoption.json").read_text())

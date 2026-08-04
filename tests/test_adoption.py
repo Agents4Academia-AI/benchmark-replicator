@@ -24,6 +24,7 @@ def _candidate(path: Path, *, command: list[str] | None = None, adapters: list[s
             {
                 "schema_version": "1",
                 "method_name": "Fake Method",
+                "setup_command": [],
                 "command": command or [sys.executable, "main.py"],
                 "result": {"path": "metrics.json", "format": "json"},
                 "metric_map": {"score": "score"},
@@ -59,7 +60,9 @@ def test_official_code_works_unchanged_without_inheriting_secrets(monkeypatch, t
     reference, working, candidate = _trees(tmp_path, source)
     record = new_adoption_record(None, strategy="reuse-first")
 
-    origin, _, result = try_adoption(reference, working, candidate, record, timeout=5)
+    origin, _, result = try_adoption(
+        reference, working, candidate, record, timeout=5, unsafe_local=True
+    )
 
     assert origin == "official_unmodified"
     assert result is not None and result.metrics == {"score": True}
@@ -87,6 +90,7 @@ def test_environment_fix_succeeds(tmp_path):
         record,
         stage_actions={"environment": environment},
         timeout=5,
+        unsafe_local=True,
     )
 
     assert origin == "official_environment_fixed"
@@ -111,6 +115,7 @@ def test_adapter_succeeds_without_source_changes(tmp_path):
         record,
         stage_actions={"environment": noop, "adapter": adapter},
         timeout=5,
+        unsafe_local=True,
     )
 
     assert origin == "official_adapted"
@@ -135,6 +140,7 @@ def test_minimal_source_patch_succeeds(tmp_path):
         record,
         stage_actions={"environment": noop, "adapter": noop, "source_patch": patch},
         timeout=5,
+        unsafe_local=True,
     )
 
     assert origin == "official_patched"
@@ -156,6 +162,7 @@ def test_all_adoption_attempts_fail_with_fixed_bound(tmp_path):
         record,
         stage_actions={"environment": noop, "adapter": noop, "source_patch": noop},
         timeout=5,
+        unsafe_local=True,
     )
 
     assert origin is None
@@ -166,6 +173,17 @@ def test_all_adoption_attempts_fail_with_fixed_bound(tmp_path):
         "official_adapted",
         "official_patched",
     ]
+
+
+def test_official_command_is_blocked_without_unsafe_opt_in(tmp_path):
+    reference, working, candidate = _trees(tmp_path, _write_success())
+    record = new_adoption_record(None, strategy="reuse-first")
+
+    origin, _, result = try_adoption(reference, working, candidate, record, timeout=5)
+
+    assert origin is None
+    assert result is not None and "execution is disabled" in result.failure
+    assert not (working / "metrics.json").exists()
 
 
 def test_provenance_and_secret_scrubbing(tmp_path):

@@ -39,7 +39,10 @@ paper → planner → human checkpoint (--yes skips the prompt)
                             validate baseline.json + stable runner
 ```
 
-The official-code levels are cumulative and fixed. Environment repair may change only
+The official-code levels are cumulative and fixed, but their setup and run commands are not
+executed unless `--unsafe-local-official-code` is passed. Without that explicit opt-in,
+reuse-first records the blocked adoption and falls back to scratch until a sandbox backend is
+available. Environment repair may change only
 dependency/environment files. The adapter may add listed files but may not edit official
 source. A source patch is limited to five files and 400 unified-diff lines. There is one
 model turn and one command execution per adoption level, and each local command has a
@@ -66,7 +69,7 @@ files from incomplete adoption therefore cannot contaminate the fallback.
 
 `.replicator/adoption.json` records:
 
-- strategy and whether execution was local;
+- strategy and whether unsafe local execution was explicitly enabled;
 - official URL, commit SHA, detected license, and UTC retrieval time;
 - each stage, command, return code, runtime, and scrubbed failure;
 - environment changes, adapter files, source modifications, and a unified source patch;
@@ -74,7 +77,8 @@ files from incomplete adoption therefore cannot contaminate the fallback.
 
 Common credential keys and values are redacted before this file is written. The orchestrator
 does not persist process environment variables, and credential-looking environment variables
-are removed before implementation commands run. Commands run locally without a shell. The
+are removed before implementation commands run. Opted-in commands run locally without a shell;
+they are not a security sandbox. The
 Codex SDK phases use a workspace-write execution boundary; this is a path guard, not a
 security sandbox.
 
@@ -117,12 +121,12 @@ exits non-zero before cleanup. Cleaner runs only after both judges pass.
 Every successful output has a validated root-level `baseline.json` with:
 
 - schema/status, method name, and implementation origin;
-- paper URL and official code URL/commit when available;
+- paper URL and official code URL/commit/license/retrieval time when available;
 - stable command and normalized result path/format;
 - supported overrides and their types/flags;
 - local hardware/environment facts;
-- modifications and verification status/command;
-- an internal argv/cwd/result mapping used by the runner.
+- categorized environment, adapter, and source modifications plus the source patch;
+- verification status/command and an internal setup argv/cwd/result mapping used by the runner.
 
 The origins are `official_unmodified`, `official_environment_fixed`, `official_adapted`,
 `official_patched`, or `reimplemented`.
@@ -133,7 +137,9 @@ Every baseline runs through exactly:
 bash run.sh --spec run-spec.json --output run-result.json
 ```
 
-The checked-in default spec is `{}` and reproduces the verified run. Supported values such as
+The checked-in default spec is `{}` and reproduces the verified run; `bash run.sh` needs no
+arguments. A spec may include `"schema_version": "1.0"`, which the runner preserves in both
+successful and failed normalized results. Supported values such as
 seed, dataset, or split are converted to real command flags. Unknown or incorrectly typed
 overrides fail with a clear error; they are never ignored. A successful normalized result has
 `status`, `seed`, a flat object of numeric/boolean `metrics`, `runtime_seconds`, and

@@ -83,6 +83,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Baseline acquisition strategy (default: reuse-first). 'scratch' preserves "
         "the original plan-and-reimplement behavior.",
     )
+    parser.add_argument(
+        "--unsafe-local-official-code",
+        action="store_true",
+        default=False,
+        help="Allow official repository setup and run commands on this host. This is unsafe; "
+        "without it, reuse-first falls back to scratch until a sandbox backend is configured.",
+    )
     return parser.parse_args(argv)
 
 
@@ -145,6 +152,8 @@ def main(argv: list[str] | None = None) -> None:
     if args.yes:
         print("Mode:  auto-approve (no checkpoint)")
     print(f"Strategy: {args.strategy}")
+    if args.unsafe_local_official_code:
+        print("Warning: official code will execute directly on this host.")
     asyncio.run(
         run_pipeline(
             repo,
@@ -154,6 +163,7 @@ def main(argv: list[str] | None = None) -> None:
             gpu=args.gpu,
             auto_approve=args.yes,
             strategy=args.strategy,
+            unsafe_local_official_code=args.unsafe_local_official_code,
         )
     )
 

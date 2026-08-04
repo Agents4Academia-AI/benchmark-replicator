@@ -85,6 +85,7 @@ class OfficialProvenance:
 @dataclass(frozen=True)
 class Candidate:
     method_name: str
+    setup_command: list[str]
     command: list[str]
     result_path: str
     result_format: str
@@ -245,6 +246,7 @@ def load_candidate(path: Path) -> Candidate:
     if not isinstance(data, dict) or data.get("schema_version") != "1":
         raise ValueError("adoption candidate schema_version must be '1'")
     method_name = data.get("method_name")
+    setup_command = data.get("setup_command")
     command = data.get("command")
     result = data.get("result")
     if not isinstance(method_name, str) or not method_name.strip():
@@ -255,6 +257,10 @@ def load_candidate(path: Path) -> Candidate:
         or not all(isinstance(v, str) and v for v in command)
     ):
         raise ValueError("adoption candidate command must be a non-empty string array")
+    if not isinstance(setup_command, list) or not all(
+        isinstance(value, str) and value for value in setup_command
+    ):
+        raise ValueError("adoption candidate setup_command must be a string array")
     if not isinstance(result, dict):
         raise ValueError("adoption candidate result must be an object")
     result_path = result.get("path")
@@ -283,6 +289,7 @@ def load_candidate(path: Path) -> Candidate:
         raise ValueError("adoption candidate default_seed must be an integer or null")
     return Candidate(
         method_name=method_name.strip(),
+        setup_command=setup_command,
         command=command,
         result_path=result_path,
         result_format=result_format,
@@ -318,15 +325,52 @@ def _numeric_metrics(data: object, metric_map: dict[str, str]) -> dict[str, int 
     return metrics
 
 
-def execute_candidate(candidate: Candidate, working: Path, timeout: int = 900) -> ExecutionResult:
-    """Run one candidate command locally, without a shell, and normalize its metrics."""
+def execute_candidate(
+    candidate: Candidate,
+    working: Path,
+    timeout: int = 900,
+    *,
+    unsafe_local: bool = False,
+) -> ExecutionResult:
+    """Run a candidate only after an explicit unsafe-local opt-in."""
     import time
 
+    if not unsafe_local:
+        return ExecutionResult(
+            False,
+            candidate.command,
+            None,
+            0.0,
+            {},
+            "official code execution is disabled; use --unsafe-local-official-code or a sandbox backend",
+        )
+
     result_file = working / candidate.result_path
-    if candidate.result_format == "json":
-        result_file.unlink(missing_ok=True)
     started = time.monotonic()
     try:
+        if candidate.setup_command:
+            setup = subprocess.run(
+                candidate.setup_command,
+                cwd=working,
+                timeout=timeout,
+                capture_output=True,
+                text=True,
+                env={
+                    key: value for key, value in os.environ.items() if not _SECRET_ENV.search(key)
+                },
+            )
+            if setup.returncode:
+                detail = setup.stderr.strip() or setup.stdout.strip() or "setup command failed"
+                return ExecutionResult(
+                    False,
+                    candidate.command,
+                    setup.returncode,
+                    time.monotonic() - started,
+                    {},
+                    scrub_text(f"setup command failed: {detail[-2000:]}"),
+                )
+        if candidate.result_format == "json":
+            result_file.unlink(missing_ok=True)
         process = subprocess.run(
             candidate.command,
             cwd=working,
@@ -489,7 +533,7 @@ def scrub(value: object, key: str = "") -> object:
 
 
 def new_adoption_record(
-    provenance: OfficialProvenance | None, *, strategy: str, execution_local: bool = True
+    provenance: OfficialProvenance | None, *, strategy: str, execution_local: bool = False
 ) -> dict:
     return {
         "schema_version": "1",
@@ -531,6 +575,7 @@ def try_adoption(
     *,
     stage_actions: dict[str, StageAction] | None = None,
     timeout: int = 900,
+    unsafe_local: bool = False,
 ) -> tuple[str | None, Candidate | None, ExecutionResult | None]:
     """Try the four adoption levels exactly once each, in fixed order."""
     actions = stage_actions or {}
@@ -572,10 +617,11 @@ def try_adoption(
             record["attempts"].append({"stage": origin, "status": "failed", "failure": detail})
             record["failures"].append(detail)
             continue
-        last_result = execute_candidate(candidate, working, timeout)
+        last_result = execute_candidate(candidate, working, timeout, unsafe_local=unsafe_local)
         attempt = {
             "stage": origin,
             "status": "succeeded" if last_result.succeeded else "failed",
+            "setup_command": scrub_command(candidate.setup_command),
             "command": scrub_command(last_result.command),
             "returncode": last_result.returncode,
             "runtime_seconds": round(last_result.runtime_seconds, 3),

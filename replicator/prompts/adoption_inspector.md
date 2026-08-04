@@ -13,6 +13,7 @@ Write only `.replicator/adoption-candidate.json` with this schema:
 {
   "schema_version": "1",
   "method_name": "method name",
+  "setup_command": ["python", "-m", "pip", "install", "-r", "requirements.txt"],
   "command": ["python", "entry.py"],
   "result": {"path": "relative/result.json", "format": "json"},
   "metric_map": {"criterion_id": "nested.official.metric"},
@@ -24,8 +25,10 @@ Write only `.replicator/adoption-candidate.json` with this schema:
 }
 ```
 
-The command runs from the official repository root. Use `json` when the command writes a
-JSON file and `stdout_json` only when its final stdout line is a JSON object. Do not invent
+Both commands run from the official repository root without a shell. `setup_command` must be
+the idempotent bootstrap needed in a fresh environment; use `[]` only when no setup is needed.
+Use `json` when the command writes a JSON file and `stdout_json` only when its final stdout line
+is a JSON object. Do not invent
 support for seed, dataset, split, or other overrides: include only flags the official entry
 point actually accepts. Map only numeric/boolean outputs. If there is no obvious runnable
 command or machine-readable result, still record the most plausible documented command and

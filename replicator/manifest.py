@@ -47,6 +47,7 @@ def build_manifest(
     *,
     method_name: str,
     origin: str,
+    setup_command: list[str],
     command: list[str],
     cwd: str,
     result_path: str,
@@ -55,7 +56,7 @@ def build_manifest(
     supported_overrides: dict[str, dict],
     default_seed: int | None,
     hardware_mode: str,
-    modifications: list[str],
+    modifications: dict[str, object],
     provenance: OfficialProvenance | None,
     verification_status: str = "pending",
 ) -> dict:
@@ -67,6 +68,8 @@ def build_manifest(
         "paper_url": paper_url(repo),
         "code_url": provenance.url if provenance else None,
         "commit_sha": provenance.commit_sha if provenance else None,
+        "license": provenance.license if provenance else None,
+        "retrieved_at": provenance.retrieved_at if provenance else None,
         "command": "bash run.sh --spec run-spec.json --output run-result.json",
         "result": {"path": "run-result.json", "format": "json"},
         "supported_overrides": supported_overrides,
@@ -78,6 +81,7 @@ def build_manifest(
             "command": "bash run.sh --spec run-spec.json --output run-result.json",
         },
         "invocation": {
+            "setup_command": setup_command,
             "command": command,
             "cwd": cwd,
             "result": {"path": result_path, "format": result_format},
@@ -100,6 +104,8 @@ def validate_manifest(data: object) -> list[str]:
         "paper_url",
         "code_url",
         "commit_sha",
+        "license",
+        "retrieved_at",
         "command",
         "result",
         "supported_overrides",
@@ -143,8 +149,17 @@ def validate_manifest(data: object) -> list[str]:
                     )
             if "choices" in definition and not isinstance(definition["choices"], list):
                 errors.append(f"supported override {name!r} choices must be an array")
-    if not isinstance(data.get("modifications"), list):
-        errors.append("modifications must be an array")
+    modifications = data.get("modifications")
+    if not isinstance(modifications, dict):
+        errors.append("modifications must be an object")
+    else:
+        for name in ("environment", "adapters", "source"):
+            if not isinstance(modifications.get(name), list) or not all(
+                isinstance(path, str) for path in modifications[name]
+            ):
+                errors.append(f"modifications.{name} must be a string array")
+        if not isinstance(modifications.get("source_patch"), str):
+            errors.append("modifications.source_patch must be a string")
     result = data.get("result")
     if not isinstance(result, dict) or result.get("format") != "json" or not result.get("path"):
         errors.append("result must name a JSON path")
@@ -172,6 +187,13 @@ def validate_manifest(data: object) -> list[str]:
             errors.append("invocation.command must be a non-empty string array")
         elif any(_SECRET_FLAG.search(part) for part in command):
             errors.append("invocation.command must not contain credential flags")
+        setup_command = invocation.get("setup_command")
+        if not isinstance(setup_command, list) or not all(
+            isinstance(part, str) and part for part in setup_command
+        ):
+            errors.append("invocation.setup_command must be a string array")
+        elif any(_SECRET_FLAG.search(part) for part in setup_command):
+            errors.append("invocation.setup_command must not contain credential flags")
         cwd = invocation.get("cwd")
         if not isinstance(cwd, str) or Path(cwd).is_absolute() or ".." in Path(cwd).parts:
             errors.append("invocation.cwd must be a safe relative path")
@@ -198,6 +220,10 @@ def validate_manifest(data: object) -> list[str]:
             errors.append("official origins require code_url")
         if not isinstance(data.get("commit_sha"), str) or not data.get("commit_sha"):
             errors.append("official origins require commit_sha")
+        if not isinstance(data.get("license"), str) or not data.get("license"):
+            errors.append("official origins require license")
+        if not isinstance(data.get("retrieved_at"), str) or not data.get("retrieved_at"):
+            errors.append("official origins require retrieved_at")
     return errors
 
 
@@ -228,7 +254,7 @@ def manifest_from_candidate(
     *,
     origin: str,
     provenance: OfficialProvenance,
-    modifications: list[str],
+    modifications: dict[str, object],
     hardware_mode: str,
     verification_status: str = "pending",
 ) -> dict:
@@ -236,6 +262,7 @@ def manifest_from_candidate(
         repo,
         method_name=candidate.method_name,
         origin=origin,
+        setup_command=candidate.setup_command,
         command=candidate.command,
         cwd="official",
         result_path=candidate.result_path,
@@ -268,6 +295,7 @@ def load_execution_contract(repo: Path) -> dict:
     return {
         "schema_version": "1",
         "method_name": "paper baseline",
+        "setup_command": [],
         "command": ["bash", ".replicator/run-implementation.sh"],
         "result": {"path": ".replicator/results.json", "format": "json"},
         "metric_map": {},
@@ -285,6 +313,7 @@ def scratch_manifest(
     contract = load_execution_contract(repo)
     candidate = Candidate(
         method_name=str(contract.get("method_name", "paper baseline")),
+        setup_command=list(contract["setup_command"]),
         command=list(contract["command"]),
         result_path=contract["result"]["path"],
         result_format=contract["result"]["format"],
@@ -297,6 +326,7 @@ def scratch_manifest(
         repo,
         method_name=candidate.method_name,
         origin="reimplemented",
+        setup_command=candidate.setup_command,
         command=candidate.command,
         cwd=".",
         result_path=candidate.result_path,
@@ -305,7 +335,12 @@ def scratch_manifest(
         supported_overrides=candidate.supported_overrides,
         default_seed=candidate.default_seed,
         hardware_mode=hardware_mode,
-        modifications=["Reimplemented from the paper plan."],
+        modifications={
+            "environment": [],
+            "adapters": [],
+            "source": ["Reimplemented from the paper plan."],
+            "source_patch": "",
+        },
         provenance=provenance,
         verification_status=verification_status,
     )

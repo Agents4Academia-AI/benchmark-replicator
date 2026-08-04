@@ -22,6 +22,7 @@ _SECRET_ENV = re.compile(
     r"^aws_|^openai_|^anthropic_|^github_|^gitlab_|^huggingface_|^hf_)",
     re.I,
 )
+RUN_SPEC_SCHEMA_VERSION = "1.0"
 
 
 def _scrub_error(value: str) -> str:
@@ -72,11 +73,11 @@ def _check_override(name: str, value: object, definition: dict) -> None:
         raise ValueError(f"override {name!r} must be one of {choices!r}")
 
 
-def _command(manifest: dict, spec: dict) -> list[str]:
+def _command(manifest: dict, overrides: dict) -> list[str]:
     invocation = manifest["invocation"]
     command = list(invocation["command"])
     supported = manifest["supported_overrides"]
-    unknown = sorted(set(spec) - set(supported))
+    unknown = sorted(set(overrides) - set(supported))
     if unknown:
         raise ValueError(
             "unsupported override(s): "
@@ -84,7 +85,7 @@ def _command(manifest: dict, spec: dict) -> list[str]:
             + "; supported: "
             + (", ".join(sorted(supported)) if supported else "none")
         )
-    for name, value in spec.items():
+    for name, value in overrides.items():
         definition = supported[name]
         _check_override(name, value, definition)
         flag = definition.get("flag")
@@ -102,6 +103,13 @@ def _command(manifest: dict, spec: dict) -> list[str]:
         else:
             command.extend([flag, str(value)])
     return command
+
+
+def _spec_metadata(spec: dict) -> tuple[str, dict]:
+    schema_version = spec.get("schema_version", RUN_SPEC_SCHEMA_VERSION)
+    if schema_version != RUN_SPEC_SCHEMA_VERSION:
+        raise ValueError(f"run spec schema_version must be {RUN_SPEC_SCHEMA_VERSION!r}")
+    return schema_version, {name: value for name, value in spec.items() if name != "schema_version"}
 
 
 def _metrics(raw: object, metric_map: dict[str, str]) -> dict[str, int | float | bool]:
@@ -125,16 +133,34 @@ def _metrics(raw: object, metric_map: dict[str, str]) -> dict[str, int | float |
 def run(repo: Path, spec_path: Path, output_path: Path) -> int:
     manifest: dict = {}
     spec: dict = {}
+    spec_schema_version = RUN_SPEC_SCHEMA_VERSION
     try:
         manifest = _load_object(repo / "baseline.json", "baseline.json")
         spec_path = _inside(repo, spec_path, "run spec path")
         output_path = _inside(repo, output_path, "output path")
         spec = _load_object(spec_path, "run spec")
-        command = _command(manifest, spec)
+        spec_schema_version, overrides = _spec_metadata(spec)
+        command = _command(manifest, overrides)
         invocation = manifest["invocation"]
         cwd = _inside(repo, repo / invocation["cwd"], "invocation working directory")
         result = invocation["result"]
         result_path = _inside(repo, cwd / result["path"], "implementation result path")
+        setup_command = invocation.get("setup_command", [])
+        if setup_command:
+            setup = subprocess.run(
+                setup_command,
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                env={
+                    key: value for key, value in os.environ.items() if not _SECRET_ENV.search(key)
+                },
+            )
+            if setup.returncode:
+                detail = (setup.stderr.strip() or setup.stdout.strip() or "setup command failed")[
+                    -2000:
+                ]
+                raise RuntimeError(f"setup command failed ({setup.returncode}): {detail}")
         if result["format"] == "json":
             result_path.unlink(missing_ok=True)
         started = time.monotonic()
@@ -158,6 +184,7 @@ def run(repo: Path, spec_path: Path, output_path: Path) -> int:
         seed = spec.get("seed", invocation.get("default_seed"))
         normalized = {
             "status": "success",
+            "schema_version": spec_schema_version,
             "seed": seed,
             "metrics": metrics,
             "runtime_seconds": round(runtime, 6),
@@ -181,6 +208,7 @@ def run(repo: Path, spec_path: Path, output_path: Path) -> int:
             json.dumps(
                 {
                     "status": "error",
+                    "schema_version": spec.get("schema_version", spec_schema_version),
                     "seed": spec.get("seed"),
                     "metrics": {},
                     "runtime_seconds": 0.0,
@@ -198,8 +226,8 @@ def run(repo: Path, spec_path: Path, output_path: Path) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--spec", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--spec", type=Path, default=Path("run-spec.json"))
+    parser.add_argument("--output", type=Path, default=Path("run-result.json"))
     args = parser.parse_args(argv)
     repo = Path(__file__).resolve().parents[1]
     return run(repo, args.spec.resolve(), args.output.resolve())
