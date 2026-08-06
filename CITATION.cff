@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+title: "Benchmark Replicator: turning papers into runnable implementations"
+message: "If you use Benchmark Replicator, please cite it."
+type: software
+authors:
+  - given-names: Sahel
+    family-names: Iqbal
+  - given-names: Arya
+    family-names: Akhavan
+  - given-names: Olga
+    family-names: Isupova
+repository-code: "https://github.com/Agents4Academia-AI/benchmark-replicator"
+url: "https://github.com/Agents4Academia-AI/benchmark-replicator"
+abstract: "Turn any prior empirical paper into a clean, minimal, runnable implementation. Compare, extend, reproduce."
+keywords:
+  - reproducibility
+  - benchmarks
+  - code generation
+  - research agents
+  - research code
