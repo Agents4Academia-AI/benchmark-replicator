@@ -18,10 +18,9 @@ A timelapse of the agent turning a paper into a clean, runnable baseline repo:
 
 https://github.com/user-attachments/assets/48e06395-4af0-498c-96d2-8922d719a26d
 
-> **This is the `openai-codex-sdk` branch.** It runs every phase with the native
-> [Codex Python SDK](https://developers.openai.com/codex/sdk/), so it does not
-> depend on LangChain or LiteLLM. See [`main`](../../tree/main) for the
-> provider-agnostic version or [`claude-sdk`](../../tree/claude-sdk) for Claude.
+Every phase can use either a Codex login or an OpenAI-compatible API. This
+includes OpenRouter, so a single OpenRouter key and model can power both
+Paperena Agent's experimental writer and this replicator.
 
 ## Installation
 
@@ -33,11 +32,19 @@ python -m venv .venv && source .venv/bin/activate
 pip install "benchmark-replicator @ git+https://github.com/Agents4Academia-AI/benchmark-replicator.git@openai-codex-sdk"
 ```
 
-Sign in once with Codex. The SDK reuses the same saved authentication as the
-Codex CLI, including ChatGPT-managed Codex access:
+For the default Codex backend, sign in once with Codex. The SDK reuses the same
+saved authentication as the Codex CLI, including ChatGPT-managed Codex access:
 
 ```bash
 codex login
+```
+
+Or use OpenRouter (or another OpenAI-compatible service) without Codex:
+
+```bash
+export OPENROUTER_API_KEY=sk-or-...
+replicate https://example.com/paper.pdf \
+  --provider openrouter --model anthropic/claude-sonnet-4-6 --yes
 ```
 
 ## Usage
@@ -51,7 +58,10 @@ Options:
 
 ```
 --out DIR                output directory (default: replications/<arxiv-id> or replications/pdf-<hash>)
---model MODEL            override the Codex model for all phases (default: gpt-5.6-sol)
+--model MODEL            override the model for all phases (default: gpt-5.6-sol)
+--provider PROVIDER       codex (default), openrouter, or openai-compatible
+--api-key-env NAME        environment variable containing the provider key
+--base-url URL            OpenAI-compatible endpoint URL (required for openai-compatible)
 --agent-config FILE      JSON file with per-agent model and reasoning-effort settings
 --instructions TEXT|FILE extra instructions for the planner: literal text or a path to a file
 --yes, -y                auto-approve the plan and run without stopping at the human checkpoint

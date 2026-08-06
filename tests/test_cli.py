@@ -19,6 +19,7 @@ def test_defaults():
     assert args.agent_config is None
     assert args.strategy == "reuse-first"
     assert args.unsafe_local_official_code is False
+    assert args.provider == "codex"
 
 
 def test_flags_parse():
@@ -27,6 +28,8 @@ def test_flags_parse():
             "paper.pdf",
             "--model",
             "gpt-5.6-sol",
+            "--provider",
+            "openrouter",
             "--agent-config",
             "agents.json",
             "-y",
@@ -45,11 +48,17 @@ def test_flags_parse():
     assert args.out == Path("myout")
     assert args.strategy == "scratch"
     assert args.unsafe_local_official_code is True
+    assert args.provider == "openrouter"
 
 
 def test_missing_url_errors():
     with pytest.raises(SystemExit):
         _parse_args([])
+
+
+def test_non_codex_provider_requires_auto_approval():
+    with pytest.raises(SystemExit):
+        _parse_args(["paper.pdf", "--provider", "openrouter"])
 
 
 def test_resolve_instructions_literal_text():

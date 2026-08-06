@@ -12,7 +12,7 @@ import asyncio
 import sys
 from pathlib import Path
 
-from .agent import load_agent_settings
+from .agent import configure_backend, load_agent_settings
 from .paper import (
     copy_local_pdf,
     download_html,
@@ -45,7 +45,21 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--model",
         default=None,
-        help="Override the Codex model for every phase (default: gpt-5.6-sol).",
+        help="Override the model for every phase.",
+    )
+    parser.add_argument(
+        "--provider",
+        choices=("codex", "openrouter", "openai-compatible"),
+        default="codex",
+        help="LLM backend (default: codex).",
+    )
+    parser.add_argument(
+        "--api-key-env", default=None, help="Environment variable holding the provider API key."
+    )
+    parser.add_argument(
+        "--base-url",
+        default="",
+        help="OpenAI-compatible API base URL (required for openai-compatible).",
     )
     parser.add_argument(
         "--agent-config",
@@ -90,7 +104,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Allow official repository setup and run commands on this host. This is unsafe; "
         "without it, reuse-first falls back to scratch until a sandbox backend is configured.",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.provider != "codex" and not args.yes:
+        parser.error(
+            "--provider openrouter/openai-compatible requires --yes; "
+            "interactive plan revision is currently available only with Codex"
+        )
+    return args
 
 
 def _resolve_instructions(value: str | None) -> str:
@@ -107,6 +127,12 @@ def main(argv: list[str] | None = None) -> None:
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
     args = _parse_args(argv)
+    import os
+
+    key_env = args.api_key_env or (
+        "OPENROUTER_API_KEY" if args.provider == "openrouter" else "OPENAI_API_KEY"
+    )
+    configure_backend(args.provider, os.environ.get(key_env, ""), args.base_url)
     source = args.url.strip()
 
     try:
@@ -146,7 +172,7 @@ def main(argv: list[str] | None = None) -> None:
     agent_settings = load_agent_settings(args.agent_config) if args.agent_config else {}
     if instructions:
         print(f"Instructions: {instructions[:80]}{'…' if len(instructions) > 80 else ''}")
-    print(f"Agent: Codex{f' (model={args.model})' if args.model else ''}")
+    print(f"Agent: {args.provider}{f' (model={args.model})' if args.model else ''}")
     if args.gpu:
         print("Mode:  GPU (full + verification configs)")
     if args.yes:

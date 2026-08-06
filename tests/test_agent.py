@@ -18,6 +18,16 @@ def test_default_and_overridden_model():
     assert agent.resolve_model("tester", "gpt-5.4-mini") == "gpt-5.4-mini"
 
 
+def test_openrouter_backend_requires_a_key_and_can_be_configured():
+    with pytest.raises(ValueError, match="requires an API key"):
+        agent.configure_backend("openrouter")
+
+    agent.configure_backend("openrouter", "sk-test")
+    assert agent._backend.provider == "openrouter"
+    assert agent._api_base_url() == "https://openrouter.ai/api/v1"
+    agent.configure_backend()
+
+
 def test_load_and_resolve_agent_settings(tmp_path):
     config = tmp_path / "agents.json"
     config.write_text(

@@ -1,8 +1,14 @@
-"""Codex SDK backend for the replication pipeline."""
+"""LLM backends for the replication pipeline.
+
+Codex remains available, but OpenRouter and other OpenAI-compatible endpoints
+use the same scoped tool contract.  This keeps the pipeline independent of a
+Codex subscription.
+"""
 
 from __future__ import annotations
 
 import json
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,6 +17,8 @@ from openai_codex import ApprovalMode, AsyncCodex, Sandbox
 
 from .phases import Phase
 
+# Keep the existing Codex default for backwards compatibility.  API users
+# should pass their provider's model slug (normally from the Paperena config).
 DEFAULT_MODEL = "gpt-5.6-sol"
 _LOG_DIR_NAME = ".replicator/logs"
 _AGENT_NAMES = frozenset(
@@ -30,8 +38,30 @@ _AGENT_NAMES = frozenset(
 )
 
 
+@dataclass(frozen=True)
+class BackendSettings:
+    provider: str = "codex"
+    api_key: str = ""
+    base_url: str = ""
+
+
+_backend = BackendSettings()
+
+
+def configure_backend(provider: str = "codex", api_key: str = "", base_url: str = "") -> None:
+    """Select the process-wide model backend used by pipeline phases."""
+    if provider not in {"codex", "openrouter", "openai-compatible"}:
+        raise ValueError("provider must be codex, openrouter, or openai-compatible")
+    if provider != "codex" and not api_key:
+        raise ValueError(f"{provider} requires an API key")
+    if provider == "openai-compatible" and not base_url:
+        raise ValueError("openai-compatible requires --base-url")
+    global _backend
+    _backend = BackendSettings(provider, api_key, base_url.rstrip("/"))
+
+
 def resolve_model(_phase_name: str, override: str | None) -> str:
-    """Return the requested Codex model, or the branch-wide default."""
+    """Return the requested model, or the provider-neutral default."""
     return override or DEFAULT_MODEL
 
 
@@ -160,6 +190,129 @@ async def _run_thread(thread, prompt: str, reasoning_effort: str | None):
     return await thread.run(prompt, effort=reasoning_effort)
 
 
+def _api_base_url() -> str:
+    return _backend.base_url or "https://openrouter.ai/api/v1"
+
+
+def _api_tools(phase: Phase, repo: Path) -> tuple[list[dict], dict[str, object]]:
+    """Build a small OpenAI tool surface constrained to this phase's capabilities."""
+    root = repo.resolve()
+
+    def path(value: str) -> Path:
+        candidate = (root / value).resolve()
+        if candidate != root and root not in candidate.parents:
+            raise ValueError("paths must remain inside the replication directory")
+        return candidate
+
+    def read_file(file: str) -> str:
+        return path(file).read_text(errors="replace")
+
+    def write_file(file: str, content: str) -> str:
+        target = path(file)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content)
+        return f"wrote {file}"
+
+    def run_command(command: str) -> str:
+        completed = subprocess.run(
+            command, cwd=root, shell=True, text=True, capture_output=True, timeout=600
+        )
+        output = (completed.stdout + completed.stderr)[-12000:]
+        return f"exit={completed.returncode}\n{output}"
+
+    definitions: list[dict] = []
+    handlers: dict[str, object] = {}
+    if any(tool in phase.allowed_tools for tool in ("Read", "Glob", "Grep")):
+        definitions.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": "read_file",
+                    "description": "Read a UTF-8 text file relative to the workspace.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"file": {"type": "string"}},
+                        "required": ["file"],
+                    },
+                },
+            }
+        )
+        handlers["read_file"] = read_file
+    if "Write" in phase.allowed_tools or "Edit" in phase.allowed_tools:
+        definitions.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": "write_file",
+                    "description": "Create or replace a text file relative to the workspace.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"file": {"type": "string"}, "content": {"type": "string"}},
+                        "required": ["file", "content"],
+                    },
+                },
+            }
+        )
+        handlers["write_file"] = write_file
+    if "Bash" in phase.allowed_tools:
+        definitions.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": "run_command",
+                    "description": "Run a shell command in the workspace and return its output.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"command": {"type": "string"}},
+                        "required": ["command"],
+                    },
+                },
+            }
+        )
+        handlers["run_command"] = run_command
+    return definitions, handlers
+
+
+async def _run_openai_agent(
+    phase: Phase, repo: Path, model: str, hardware: str, task: str, log, usage: PhaseUsage
+) -> None:
+    """Execute one tool-calling turn through an OpenAI-compatible API."""
+    from openai import AsyncOpenAI
+
+    tools, handlers = _api_tools(phase, repo)
+    client = AsyncOpenAI(api_key=_backend.api_key, base_url=_api_base_url())
+    messages: list[dict] = [
+        {"role": "system", "content": _developer_instructions(phase, hardware)},
+        {"role": "user", "content": task},
+    ]
+    for _ in range(80):
+        response = await client.chat.completions.create(
+            model=model, messages=messages, tools=tools or None
+        )
+        choice = response.choices[0].message
+        messages.append(choice.model_dump(exclude_none=True))
+        if response.usage:
+            usage.input_tokens += response.usage.prompt_tokens or 0
+            usage.output_tokens += response.usage.completion_tokens or 0
+        tool_calls = choice.tool_calls or []
+        if not tool_calls:
+            final = choice.content or ""
+            log.write(f"[assistant] {final}\n")
+            if final.strip():
+                print(f"  [{_now()}] {_short(final)}")
+            return
+        for call in tool_calls:
+            try:
+                arguments = json.loads(call.function.arguments)
+                handler = handlers[call.function.name]
+                result = handler(**arguments)  # type: ignore[operator]
+            except Exception as exc:
+                result = f"tool error: {exc}"
+            log.write(f"[tool:{call.function.name}] {result}\n")
+            messages.append({"role": "tool", "tool_call_id": call.id, "content": str(result)})
+    raise RuntimeError("model exceeded the 80-call tool limit")
+
+
 async def run_agent(
     phase: Phase,
     repo: Path,
@@ -170,7 +323,7 @@ async def run_agent(
     reasoning_effort: str | None = None,
     **task_kwargs: str,
 ) -> PhaseUsage:
-    """Run one isolated Codex thread to completion."""
+    """Run one isolated agent to completion using the configured backend."""
     label = label or phase.name
     log_path = repo / _LOG_DIR_NAME / f"{label}.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -182,10 +335,16 @@ async def run_agent(
 
     with log_path.open("w", buffering=1) as log:
         log.write(f"[user] {task}\n")
-        async with AsyncCodex() as codex:
-            thread = await _start_thread(codex, phase, repo, model, hardware)
-            result = await _run_thread(thread, task, reasoning_effort)
-        _record_result(result, label, log, usage)
+        if _backend.provider == "codex":
+            async with AsyncCodex() as codex:
+                thread = await _start_thread(codex, phase, repo, model, hardware)
+                result = await _run_thread(thread, task, reasoning_effort)
+            _record_result(result, label, log, usage)
+        else:
+            if reasoning_effort:
+                log.write(f"[note] reasoning_effort={reasoning_effort} is provider-specific\n")
+            await _run_openai_agent(phase, repo, model, hardware, task, log, usage)
+            print(f"  [{_now()}] ✔ {label} finished (completed)")
 
     return usage
 
@@ -218,6 +377,10 @@ async def run_chat_agent(
     )
 
     with log_path.open("w", buffering=1) as log:
+        if _backend.provider != "codex":
+            raise RuntimeError(
+                "interactive plan revision currently requires the Codex backend; use --yes"
+            )
         async with AsyncCodex() as codex:
             thread = await _start_thread(codex, phase, repo, model, hardware)
             first = True

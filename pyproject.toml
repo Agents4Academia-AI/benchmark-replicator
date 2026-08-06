@@ -21,6 +21,7 @@ keywords = [
 ]
 dependencies = [
     "openai-codex>=0.144.4",
+    "openai>=1.0",
     "pymupdf>=1.24",
 ]
 
@@ -37,6 +38,7 @@ Issues = "https://github.com/Agents4Academia-AI/benchmark-replicator/issues"
 
 [project.scripts]
 replicate = "replicator.cli:main"
+replicate-agent = "replicator.agent_cli:main"
 
 [build-system]
 requires = ["hatchling"]
