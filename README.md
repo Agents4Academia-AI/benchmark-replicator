@@ -7,15 +7,20 @@
 Ever opened a paper's codebase to use, extend, or compare against, and given up
 because of how rough, undocumented, or bitrotted it is?
 
-Point this agent at a link to the paper PDF and it builds a clean, minimal,
-modular implementation of the method &mdash; code you can actually read, run, and
-build on, plus the experiments to reproduce the paper's key results.
+Point this tool at a paper PDF and it acquires a validated baseline. It prefers the
+authors' official implementation, escalating only from an unchanged run to environment
+repair, a thin adapter, and a minimal patch. If reuse cannot be verified, it builds the
+existing clean scratch reimplementation instead.
 
 ## Demo
 
 A timelapse of the agent turning a paper into a clean, runnable baseline repo:
 
 https://github.com/user-attachments/assets/48e06395-4af0-498c-96d2-8922d719a26d
+
+Every phase can use either a Codex login or an OpenAI-compatible API. This
+includes OpenRouter, so a single OpenRouter key and model can power both
+Paperena Agent's experimental writer and this replicator.
 
 ## Installation
 
@@ -24,26 +29,23 @@ environment:
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install "benchmark-replicator[anthropic] @ git+https://github.com/Agents4Academia-AI/benchmark-replicator.git"
+pip install "benchmark-replicator @ git+https://github.com/Agents4Academia-AI/benchmark-replicator.git@openai-codex-sdk"
 ```
 
-Swap `anthropic` for whichever provider you want to use:
-
-| Extra | Provider | Env var |
-|---|---|---|
-| `anthropic` | Anthropic | `ANTHROPIC_API_KEY` |
-| `openai` | OpenAI / OpenAI-compatible local servers | `OPENAI_API_KEY` |
-| `google` | Google Gemini | `GOOGLE_API_KEY` |
-| `ollama` | Ollama (and other local providers) | &mdash; |
-| `all` | All of the above | &mdash; |
-
-Then set the API key for your provider (a local Ollama model needs none):
+For the default Codex backend, sign in once with Codex. The SDK reuses the same
+saved authentication as the Codex CLI, including ChatGPT-managed Codex access:
 
 ```bash
-export ANTHROPIC_API_KEY=...   # or OPENAI_API_KEY / GOOGLE_API_KEY
+codex login
 ```
 
-> **Claude subscription users:** if you'd rather use your Claude monthly plan instead of an API key, check out the [`claude-sdk` branch](../../tree/claude-sdk).
+Or use OpenRouter (or another OpenAI-compatible service) without Codex:
+
+```bash
+export OPENROUTER_API_KEY=sk-or-...
+replicate https://example.com/paper.pdf \
+  --provider openrouter --model anthropic/claude-sonnet-4-6 --yes
+```
 
 ## Usage
 
@@ -56,10 +58,17 @@ Options:
 
 ```
 --out DIR                output directory (default: replications/<arxiv-id> or replications/pdf-<hash>)
---model MODEL            override the model for all phases (default: opus for plan/code, sonnet otherwise)
+--model MODEL            override the model for all phases (default: gpt-5.6-sol)
+--provider PROVIDER       codex (default), openrouter, or openai-compatible
+--api-key-env NAME        environment variable containing the provider key
+--base-url URL            OpenAI-compatible endpoint URL (required for openai-compatible)
+--agent-config FILE      JSON file with per-agent model and reasoning-effort settings
 --instructions TEXT|FILE extra instructions for the planner: literal text or a path to a file
 --yes, -y                auto-approve the plan and run without stopping at the human checkpoint
 --gpu                    GPU mode: ships ambitious paper-scale parameters; must be run inside a GPU allocation
+--strategy STRATEGY      reuse-first (default) or scratch
+--unsafe-local-official-code
+                         execute official repository setup/run commands on this host (unsafe)
 ```
 
 Use `--instructions` to steer what the planner focuses on before it writes `PLAN.md`:
@@ -69,40 +78,67 @@ replicate https://arxiv.org/abs/1706.03762 --instructions "focus only on scaled 
 replicate https://arxiv.org/abs/1706.03762 --instructions ./my_notes.md
 ```
 
-> **What to expect:** a full run drives several LLM phases &mdash; a strong model
-> for planning and coding, a cheaper one for the rest &mdash; so a single paper
-> takes from tens of minutes to about an hour and, on a hosted provider, costs a
-> few dollars in API usage. Point `--provider` at a local model (Ollama / vLLM)
-> to avoid API cost. The pipeline pauses for your approval of `PLAN.md` before it
-> writes any code, so you can stop early if the plan looks wrong.
+Use `--agent-config` to set a model and/or reasoning effort for individual agents. Omitted
+fields retain the default model (`gpt-5.6-sol`) and SDK reasoning effort. `--model` still
+overrides every configured model, but leaves each configured reasoning effort intact.
+
+```bash
+replicate https://arxiv.org/abs/1706.03762 --agent-config ./agents.json
+```
+
+```json
+{
+  "planner": {"model": "gpt-5.6-sol", "reasoning_effort": "high"},
+  "coder": {"model": "gpt-5.6-sol", "reasoning_effort": "xhigh"},
+  "tester": {"reasoning_effort": "medium"}
+}
+```
+
+Valid agent names are `planner`, `reviser`, `adoption_inspector`, `environment_fixer`,
+`adapter`, `source_patcher`, `coder`, `tester`, `benchmarker`, `repair`, and `cleaner`.
+See [`agents.json`](agents.json) for example settings.
+
+> **What to expect:** a full run drives several Codex phases and can take from
+> tens of minutes to about an hour. The pipeline pauses for your approval of
+> `PLAN.md` before it writes implementation code, so you can stop early if the
+> plan looks wrong.
 
 The generated baseline lands in the output directory &mdash; a standalone repo
-with its own `README.md`, `PLAN.md`, `REPORT.md`, source, and tests. The
+with its own `README.md`, `PLAN.md`, `REPORT.md`, source, tests, and validated
+`baseline.json`. Every successful baseline has one stable invocation:
+
+```bash
+bash run.sh --spec run-spec.json --output run-result.json
+```
+
+The empty checked-in `run-spec.json` reproduces the verified run, and `bash run.sh` uses those
+same default paths. Supported overrides are
+listed in `baseline.json`; unknown overrides fail instead of being silently ignored. The
+normalized result includes status, seed, numeric/boolean metrics, runtime, and implementation
+origin, while `.replicator/results.json` remains available for compatibility. The
 pipeline runs the **default** config (the real experiment within budget, roughly
 tens of minutes to about an hour on a modern CPU); the repo also ships an
 optional **scale-up** config for paper-scale runs.
 
 ## How it works
 
-A deterministic Python orchestrator (`replicator/pipeline.py`) runs a fixed
-sequence of scoped LLM sub-agents &mdash; planner, coder, tester, benchmarker,
-repair, and cleaner &mdash; that share state through files in the generated
-repo. Each sub-agent is a [LangGraph](https://github.com/langchain-ai/langgraph)
-tool-calling agent over the provider you choose via
-[LangChain](https://github.com/langchain-ai/langchain)'s `init_chat_model`:
-Anthropic (default), OpenAI, Google, or a local model (ollama / llama.cpp /
-vLLM). After planning, the pipeline **pauses for your approval** of `PLAN.md`
+A deterministic Python orchestrator (`replicator/pipeline.py`) owns the fixed adoption
+order, attempt bounds, fallback decision, judging, and repair loop. Agents inspect or make
+one scoped class of change; they do not choose control flow. Each phase uses a workspace-write
+execution boundary. This is a path guard, not a security sandbox, and adopted commands are not
+executed by default. To run official setup or entry-point commands directly on the host, pass
+`--unsafe-local-official-code`; otherwise reuse-first safely falls back to scratch until a
+sandbox backend is available. After planning, the
+pipeline **pauses for your approval** of `PLAN.md`
 before any code is written. Pass `--yes` to skip this checkpoint for unattended
 runs (e.g. batch jobs on an HPC cluster).
-
-![Pipeline overview: paper → planner → human checkpoint → coder → verify-and-repair loop → cleaner](docs/pipeline.png)
 
 See **[docs/how_it_works.md](docs/how_it_works.md)** for the full pipeline, the
 verify-and-repair loop, and an annotated diagram.
 
 ## Contributing
 
-Contributions are welcome &mdash; bug reports, provider integrations, prompt
+Contributions are welcome &mdash; bug reports, Codex integration improvements, prompt
 improvements, and docs. See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the dev
 setup, how to run the checks, and the PR process, and
 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community expectations.

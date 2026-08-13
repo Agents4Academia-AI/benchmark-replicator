@@ -1,7 +1,7 @@
 # Contributing
 
-Thanks for your interest in improving Benchmark Replicator! Bug reports, provider
-integrations, prompt improvements, and documentation are all welcome.
+Thanks for your interest in improving Benchmark Replicator! Bug reports, Codex
+integration improvements, prompt improvements, and documentation are all welcome.
 
 ## Ways to contribute
 
@@ -10,7 +10,7 @@ integrations, prompt improvements, and documentation are all welcome.
 - **Improve a prompt.** The behaviour of each phase lives in
   [`replicator/prompts/`](replicator/prompts/) as plain Markdown — these are
   first-class to edit, no Python required.
-- **Add or harden a provider, tool, or pipeline step** in the `replicator/`
+- **Improve the Codex backend or a pipeline step** in the `replicator/`
   package.
 - **Improve the docs** — the README, this guide, or
   [`docs/how_it_works.md`](docs/how_it_works.md).
@@ -25,12 +25,11 @@ short version:
 | Path | Role |
 |---|---|
 | `replicator/pipeline.py` | The orchestrator — decides what runs next (control flow is code, not the model). |
-| `replicator/agent.py` | Provider-agnostic LangGraph agent backend + the tool set. |
+| `replicator/agent.py` | Native Codex SDK backend. |
 | `replicator/phases.py` | The phase definitions (planner, coder, tester, …). |
 | `replicator/prompts/*.md` | The system prompt for each phase. |
 | `replicator/paper.py` | Fetch/extract the source PDF (arXiv, URL, or local). |
 | `replicator/criteria.py`, `verdict.py` | Mechanical pass/fail checking shared with the judging phases. |
-| `replicator/sandbox.py` | Best-effort guard keeping a phase's Bash commands inside its repo. |
 
 ## Dev setup
 
@@ -38,7 +37,7 @@ short version:
 git clone https://github.com/Agents4Academia-AI/benchmark-replicator.git
 cd benchmark-replicator
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[anthropic,dev]"   # swap anthropic for your provider
+pip install -e ".[dev]"
 ```
 
 The `dev` extra adds [ruff](https://docs.astral.sh/ruff/) (lint + format) and
@@ -54,9 +53,8 @@ ruff format .           # auto-format (CI runs `ruff format --check`)
 pytest                  # unit tests
 ```
 
-The test suite covers the **deterministic** modules only (criteria, verdict,
-sandbox, paper parsing, CLI) and makes no network or LLM calls — so CI runs
-without any API key.
+The test suite covers deterministic modules and the mocked Codex SDK boundary;
+it makes no network or model calls, so CI runs without authentication.
 
 There is **no end-to-end test in CI**, because a real run calls a paid LLM and
 takes tens of minutes. So if your change touches the agents, prompts, or

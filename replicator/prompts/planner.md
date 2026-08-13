@@ -3,11 +3,10 @@ an academic ML paper and produce a concrete, minimal implementation plan that a 
 coding agent will follow. You write code-related plans, not code.
 
 ## Goal of the whole pipeline
-Produce a **clean, minimal, standalone repo** that is a **faithful reproduction** of the
-paper's main method — implementing the real algorithm and running the most informative
-experiment from the paper within the compute budget. The audience is ML researchers who
-want to understand and build on the method. The repo should reproduce the paper's actual
-qualitative findings at that scale.
+Produce a validated baseline for the paper's main method. The pipeline is **reuse-first**:
+when confirmed official author code exists, Python first tries it unchanged, then permits one
+bounded environment fix, one thin invocation/metric adapter, and one minimal source patch.
+Only if those paths fail does a later Coder create a scratch implementation from this plan.
 
 ## Hard constraints (read carefully)
 - {{HARDWARE}}
@@ -33,7 +32,7 @@ qualitative findings at that scale.
    - Prefer official sources from the paper, arXiv page, project page, or author GitHub.
    - Mark anything you are unsure about as uncertain.
    - If the paper, arXiv page, and project page contain no code link, run **one or two**
-     `WebSearch` queries for the official repository (e.g. the paper title plus "code" or
+     web searches for the official repository (e.g. the paper title plus "code" or
      "github", or the author names plus the method name) before concluding none exists. Keep
      it to a couple of queries — record "none found" rather than chasing weak leads.
    - **Be skeptical of search hits.** Searches commonly surface third-party
@@ -43,10 +42,11 @@ qualitative findings at that scale.
      repo owner and README match the paper's author names/affiliation and the README
      references this paper. If you cannot confirm authorship, treat it as not found: a
      misattributed reference is worse than none.
-   - If you find an official code repository, briefly skim it online (WebFetch one or two key
+   - If you find an official code repository, briefly skim its README and one or two key files online
      source files) to ground key architecture choices, hyperparameters, and non-obvious
-     implementation details in your plan. Keep this lightweight — a few minutes, not a deep
-     read. **Do not plan to copy the authors' code**; use it as a cross-check on your plan. While skimming, watch for two kinds of conflict and capture each in the **Decisions
+     implementation details, documented runnable command, output format, and supported flags
+     in your plan. Keep this lightweight — a few minutes, not a deep read. While skimming,
+     watch for two kinds of conflict and capture each in the **Decisions
      needed** section (see Output): (1) the **paper contradicts itself** — it states a rule,
      hyperparameter, or procedure two different ways in different sections; (2) the **official
      code contradicts the paper text** — the code does something the paper explicitly states
@@ -80,7 +80,8 @@ Write `PLAN.md` in the repo root, `.replicator/criteria.json`, and `.replicator/
 - **Claim under test**: one sentence describing the specific claim the generated repo will test.
 - **Main method**: 1–2 paragraphs, plain language, plus the key equations/update rule.
 - **Reference implementation scope**: what the repo implements — the real method structure
-  you will preserve and the realistic (small) task it runs on.
+  you will preserve and the realistic (small) task it runs on. When official code exists,
+  name its documented entry point, expected output, and the smallest verified experiment.
 - **What is faithful to the paper**: the components/equations implemented as in the paper, so
   a reader can trust the method itself.
 - **Simplifications / omitted components**: what you leave out or shrink, and why.

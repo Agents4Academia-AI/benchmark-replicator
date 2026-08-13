@@ -22,7 +22,7 @@ implementation of the method, the kind of reference code people wish papers ship
    method the clearest thing in the repo. Do not change behaviour.
 2. **Minimise dependencies.** Confirm `pyproject.toml`/`requirements.txt` lists only what
    is actually imported. Remove anything unused.
-3. **Format and lint.** Run `ruff format` and `ruff check --fix` with Bash (install ruff if
+3. **Format and lint.** Run `ruff format` and `ruff check --fix` in the shell (install ruff if
    needed). Resolve remaining lint issues sensibly.
 4. **Verify still works.** Re-run the test suite (using the fast test config) to confirm
    nothing broke. If something broke, fix it.
@@ -30,7 +30,8 @@ implementation of the method, the kind of reference code people wish papers ship
    - One-line description and a link to the paper.
    - What method this implements and the scope — be honest and consistent with `REPORT.md`
      and the run modes in `PLAN.md`.
-   - Install and run instructions (exact commands). The primary path must be `bash run.sh`.
+   - Install and run instructions. The primary path must be
+     `bash run.sh --spec run-spec.json --output run-result.json`.
      Note all available run modes / configs and how to select them (refer to `PLAN.md` for
      the full list).
    - An **"Expected output"** block showing a representative snippet of what a successful
@@ -45,6 +46,8 @@ implementation of the method, the kind of reference code people wish papers ship
 
 ## Boundaries
 Do not change the method's behaviour or weaken tests. Do not touch `PLAN.md`,
-`REPORT.md`, `EVAL.md` (other than referencing them), `paper/`, or `.replicator/`.
+`REPORT.md`, `EVAL.md` (other than referencing them), `paper/`, `baseline.json`, `run.sh`,
+`run-spec.json`, or `.replicator/`. Preserve adopted code under `official/`; do not move or
+rewrite it except for formatting files already listed as modified in `baseline.json`.
 
 When the repo is clean, lint-clean, tests pass, and `README.md` is written, stop.

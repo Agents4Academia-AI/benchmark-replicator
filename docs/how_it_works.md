@@ -1,262 +1,181 @@
 # How the Baseline Replicator Works
 
-The Baseline Replicator turns an arXiv paper (or any PDF) into a clean, minimal,
-modular implementation of its main method. It does this with a **deterministic
-Python orchestrator** that runs a fixed sequence of scoped Claude sub-agents. The key
-design choice: *the control flow is code, not a model decision*. The model never
-auto-delegates or decides what to do next &mdash; the orchestrator (`pipeline.py`) calls each
-sub-agent in order, and the sub-agents share state only through files in the generated
-repo (`PLAN.md`, the source code, `criteria.json`, `results.json`, `REPORT.md`).
+The Baseline Replicator is a reuse-first acquisition tool. A deterministic Python
+orchestrator owns every branch and bound; model phases inspect a paper or make one scoped
+change, but never choose the next stage.
 
-## The agentic loop at a glance
+## Pipeline
 
-```
-                          ┌──────────────────────────────────┐
-                          │           ORCHESTRATOR           │
-                          │  deterministic Python (pipeline) │
-                          │  control flow != model decisions │
-                          └──────────────────────────────────┘
-                                          │
-                                          ▼
-                            ╔═══════════════════════════════╗
-            paper.pdf ─────▶║     ① PLANNER     (opus)      ║─────▶ PLAN.md
-            paper.html ────▶║   most informative experiment ║       + criteria.json
-            paper.txt ─────▶║   within budget (CPU or --gpu)║       + artifacts.json
-                            ╚═══════════════════════════════╝       (official code URL)
-                                          │
-                                          ▼
-                            ┌─────────────────────────────────────┐
-                            │   👤 HUMAN CHECKPOINT                │
-                            │   review PLAN.md                     │
-                            │   [y]es / [N]o / [c]hat to revise    │
-                            │   (--yes auto-approves, no prompt)  │
-                            └─────────────────────────────────────┘
-                               │ y         │ c            │ N
-                               │           ▼              └────────▶ exit(0)
-                               │  ╔═══════════════════════╗
-                               │  ║  ②  REVISER  (opus)   ║  stateful chat:
-                               │  ║  edits PLAN.md +      ║  user revises the plan
-                               │  ║  criteria.json        ║  turn-by-turn, then
-                               │  ╚═══════════════════════╝  re-presents checkpoint
-                               │           │
-                               │◀──────────┘ (loop back to checkpoint)
-                               ▼
-                            ┌─────────────────────────────────────────┐
-                            │  ORCHESTRATOR clones official code repo,│
-                            │  if artifacts.json gave a URL →         │
-                            │  .replicator/reference_code/ (read-only)│
-                            └─────────────────────────────────────────┘
-                                          │
-                                          ▼
-        ╭───────────────────────────────────────────────────────────────────────╮
-        │  ③ CODER  (opus):  N sequential phases parsed from PLAN.md  (max 4)   │
-        │                                                                       │
-        │   for each Phase n of N (from the plan's Implementation Phases):      │
-        │     ╔════════════════════════════╗                                    │
-        │     ║   ③ CODER  (opus)           ║  implements that phase's scope    │
-        │     ║   Phase n of N              ║  (reads reference_code/ when the  │
-        │     ╚════════════════════════════╝   official repo was cloned)        │
-        │              │                                                        │
-        │     n < N ───┤   ast syntax-check, then run the next phase (loop up)  │
-        │              │                                                        │
-        │     n = N ───┴─▶ final phase wires entry point, writes results.json   │
-        ╰─────────────────────────────────┬─────────────────────────────────────╯
-                                          ▼
-                            src/   +   .replicator/results.json
-                                          │
-        ╭───────────────────────────────────────────────────────────────────────
-        │  ④ VERIFY-AND-REPAIR LOOP            (max 2 repair attempts)          │
-        │                                                                       │
-        │   clear verdict.json before each judge; judges DIAGNOSE, never fix    │
-        │                                                                       │
-        │     ╔═══════════════════════╗      verdict.json                       │
-        │     ║  ④a TESTER  (sonnet)  ║─────▶ pass / fail ──┐                   │
-        │     ╚═══════════════════════╝   (writes test suite)│                  │
-        │                │ PASS                               │ FAIL            │
-        │                ▼                                    │                 │
-        │     ╔═══════════════════════╗                       │                 │
-        │     ║④b BENCHMARKER (sonnet)║──▶ verdict.json       │                 │
-        │     ╚═══════════════════════╝   (writes REPORT.md)  │                 │
-        │                │                                    │                 │
-        │                ▼                                    │                 │
-        │     ┌───────────────────────────────┐               │                 │
-        │     │ MECHANICAL CHECK (Python)      │ pass/fail    │                 │
-        │     │ criteria.json vs results.json  │─────▶ ─┐     │                 │
-        │     │ required failure → fold in     │        │     │                 │
-        │     └───────────────────────────────┘         │     │                 │
-        │                │ PASS                  FAIL   ▼     ▼                 │
-        │                │                      ╔═══════════════════════╗       │
-        │                │            failures  ║   ④c REPAIR  (opus)   ║       │
-        │                │            + paper ─▶║  fix root cause; only ║       │
-        │                │                      ║  agent that edits src ║       │
-        │                │                      ╚═══════════════════════╝       │
-        │                │                                    │                 │
-        │                │                    attempts < 2 ?  │                 │
-        │                │                       yes ◀────────┤                 │
-        │                │                       (re-run judges from ④a)        │
-        │                │                        no ─────────┴──▶ exit(1)      │
-        │                │                                    failures stand    │
-        │   both judges PASS                                                    │
-        ╰────────────────┼──────────────────────────────────────────────────────╯
-                         ▼
-            ╔═════════════════════════╗
-            ║   ⑤ CLEANER  (sonnet)   ║─────▶ tidy src/ + README.md
-            ╚═════════════════════════╝       (ruff, re-run tests)
+```text
+paper → planner → human checkpoint (--yes skips the prompt)
                          │
-                         ▼
-                    ✅  DONE
+                         ├─ --strategy scratch ─────────────────────────────┐
+                         │                                                  │
+                         └─ reuse-first                                     │
+                              │                                             │
+                              ├─ no confirmed official code ────────────────┤
+                              │                                             │
+                              └─ preserve immutable official source         │
+                                   │                                        │
+                                   ├─ 1. run unchanged (one execution)      │
+                                   ├─ 2. environment fix (one turn + run)   │
+                                   ├─ 3. thin adapter (one turn + run)      │
+                                   └─ 4. minimal patch (one turn + run)     │
+                                          │                                 │
+                            candidate runs?                                 │
+                              │ yes                  no ─────────────────────┤
+                              ▼                                             ▼
+                    isolated adoption verification                 scratch coder phases
+                              │                                             │
+                              └──────── tester → benchmarker ───────────────┘
+                                                │
+                                      failure → repair (max 2)
+                                                │
+                              adoption still fails? → discard staging and
+                                                        run scratch coder
+                                                │
+                                              cleaner
+                                                │
+                            validate baseline.json + stable runner
 ```
 
-## Entry point and paper acquisition
+The official-code levels are cumulative and fixed, but their setup and run commands are not
+executed unless `--unsafe-local-official-code` is passed. Without that explicit opt-in,
+reuse-first records the blocked adoption and falls back to scratch until a sandbox backend is
+available. Environment repair may change only
+dependency/environment files. The adapter may add listed files but may not edit official
+source. A source patch is limited to five files and 400 unified-diff lines. There is one
+model turn and one command execution per adoption level, and each local command has a
+timeout. The existing tester/benchmarker/repair loop remains bounded at two repairs.
 
-The CLI (`cli.py`, exposed as `replicate`) accepts an arXiv URL/id, a direct PDF URL, or
-a local PDF path. `paper.py` (standard library only) resolves the source and populates a
-`paper/` folder inside the output repo:
+`--strategy scratch` bypasses every adoption phase and retains the original planner,
+checkpoint, phased Coder, judging, repair, and Cleaner behavior. CPU/GPU profiles, `--yes`,
+mechanical criteria, and the interactive plan revision checkpoint apply to both strategies.
 
-- **arXiv input** →  downloads the **PDF** and, when available, arXiv's **HTML rendering**.
-  HTML exists only for papers with usable LaTeX source (~2023 onward); when present it is
-  preferred because its text and equations are cleaner and far cheaper to read than PDF
-  page-images. The PDF remains authoritative and is the only source with figures.
-- **Direct PDF URL / local PDF** → downloads or copies the PDF (validated by a `%PDF-`
-  header). No HTML in this case.
+## Official source isolation and provenance
 
-The source link is recorded in `paper/SOURCE.txt`. Optional `--instructions` (literal text
-or a file path) are passed through to the planner. `--provider` selects the LLM provider
-(Anthropic by default; OpenAI, Google, or a local model), `--model` overrides every phase's
-model with a single `provider:model` id, and `--base-url` points at a local OpenAI-compatible
-server (vLLM / llama.cpp). The CLI then hands the prepared repo to `run_pipeline` (`pipeline.py`).
+Confirmed official code is cloned to `.replicator/reference_code/`. The orchestrator records
+the repository URL and HEAD commit before removing git metadata; this directory is then used
+only as the immutable comparison/reference tree and its filesystem permissions are made
+read-only. Every attempted change is made in
+`.replicator/official_working/`.
 
-## How each phase runs
+After a candidate command runs, judging happens in
+`.replicator/adoption_verification/`, a disposable nested output repo. Only a candidate that
+passes Tester, Benchmarker, mechanical criteria, bounded Repair, Cleaner, manifest validation,
+and the stable runner is promoted. If verification fails, the whole nested repo and working
+copy are removed before the scratch Coder starts. Tests, reports, source, and generated runner
+files from incomplete adoption therefore cannot contaminate the fallback.
 
-Every phase is one independent LangGraph tool-calling agent with a **fresh context**
-(`run_agent` in `agent.py`). A phase (`phases.py`) is a small dataclass bundling:
+`.replicator/adoption.json` records:
 
-- a **system prompt** loaded from `prompts/<name>.md`,
-- a **task** string (the per-run instruction; placeholders like `{sources}`, `{pdf}`,
-  `{failures}` are filled by the orchestrator),
-- an **allowed tool set** (everything else is unavailable to that agent), and
-- a **turn cap** (`max_turns`, mapped to the graph recursion limit) to bound cost.
+- strategy and whether unsafe local execution was explicitly enabled;
+- official URL, commit SHA, detected license, and UTC retrieval time;
+- each stage, command, return code, runtime, and scrubbed failure;
+- environment changes, adapter files, source modifications, and a unified source patch;
+- the final implementation origin or the scratch fallback.
 
-The tools (`Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`, `WebFetch`, `WebSearch`) are
-defined in `agent.py` and bound to the generated repo. As each phase streams, the orchestrator
-prints progress lines and writes a full transcript to `.replicator/logs/<phase>.log`. Per-phase
-token usage is summed from each message's `usage_metadata`, and a USD cost is shown when the
-model's price is known &mdash; reported in a cost summary table at the end.
+Common credential keys and values are redacted before this file is written. The orchestrator
+does not persist process environment variables, and credential-looking environment variables
+are removed before implementation commands run. Opted-in commands run locally without a shell;
+they are not a security sandbox. The
+Codex SDK phases use a workspace-write execution boundary; this is a path guard, not a
+security sandbox.
 
-**Default models** (`agent.py`): each phase is a *strong* or *cheap* tier &mdash; strong for
-the hard reasoning steps (planner, reviser, coder, repair), cheap for the rest (tester,
-benchmarker, cleaner). `--provider` maps those tiers to that provider's default pair (e.g.
-opus/sonnet for Anthropic); a `--model` flag overrides every phase with one model id.
+## Planning and human checkpoint
 
-## The phases in detail
+The Planner reads arXiv HTML or extracted text when available, with the PDF authoritative for
+figures and ambiguities. It writes:
 
-### ① Planner (opus)
-Reads the paper (HTML preferred, PDF authoritative) and writes two files:
+- `PLAN.md`: the method, verified experiment, compute budget, fidelity decisions, success
+  criteria, and possible scratch implementation phases;
+- `.replicator/criteria.json`: numeric/boolean criteria for deterministic comparison;
+- `.replicator/artifacts.json`: a confirmed official code URL or `null`.
 
-- **`PLAN.md`** &mdash; a plan for the paper's most informative CPU-feasible experiment (roughly
-  tens of minutes to about an hour on a modern CPU): one method, the real dataset or task from
-  the paper (or a smaller version if needed), and success criteria targeting the paper's
-  qualitative result at that scale. Qualitative criteria stay here as prose.
-- **`.replicator/criteria.json`** &mdash; the *mechanizable* subset of success criteria, each as a
-  stable `id`, a `metric` description, a `comparison` operator (`>= <= > < == !=`), a numeric
-  or boolean `threshold`, and a `required` flag.
+The orchestrator presents `PLAN.md` before acquisition or coding. `[c]hat` invokes the Reviser,
+`[y]es` continues, and `[N]o` stops. `--yes` auto-approves for unattended CPU or GPU jobs.
 
-Tools: read tools + `Write` + web search/fetch (for context). It does **not** write code.
+When official code exists, the read-only Official Code Inspector derives a candidate argv,
+result location/format, metric map, default seed, and only the overrides the official entry
+point really supports. Subsequent agents each receive the last concrete failure and may make
+only their stage's class of change.
 
-### Human checkpoint
-The orchestrator prints `PLAN.md` and asks the user to approve (`_checkpoint`):
+## Verification and repair
 
-- **`[y]es`** → proceed to coding.
-- **`[N]o`** → stop cleanly (`exit(0)`); the plan remains on disk.
-- **`[c]hat`** → open the **Reviser** to revise the plan, then re-present the checkpoint.
+The same verification path judges adopted and reimplemented outputs:
 
-No code is written until the plan is approved.
+1. Tester writes and runs focused deterministic tests, exercises the stable runner, and writes
+   `.replicator/verdict.json`.
+2. Benchmarker runs `bash run.sh --spec run-spec.json --output run-result.json`, writes
+   `REPORT.md` and `EVAL.md`, and records a verdict.
+3. Python compares `.replicator/criteria.json` with `.replicator/results.json`. Missing,
+   malformed, non-numeric/non-boolean, or failing required metrics force failure.
+4. Repair receives the exact failures and may try a root-cause fix. Both judges run again.
 
-### ② Reviser (opus) &mdash; only on `[c]hat`
-Unlike the one-shot phases, this is a **stateful** conversation kept across turns by a
-LangGraph checkpointer (`run_chat_agent`). The user types successive revision requests; the agent remembers the
-conversation and edits `PLAN.md` / `.replicator/criteria.json` in place (it has `Edit` in
-addition to the planner's tools). The first message tells it where the paper lives. Typing
-`done`/`exit`/`quit` or an empty line returns to the approve prompt with the updated plan.
+A missing or contradictory verdict is a failure. If an adopted candidate still fails after
+the repair budget, Python discards it and starts scratch. If scratch still fails, the command
+exits non-zero before cleanup. Cleaner runs only after both judges pass.
 
-### ③ Coder (opus)
-Implements the method from `PLAN.md` as a clean, minimal, CPU-runnable repo. Its entry point
-must write **`.replicator/results.json`** &mdash; a flat dict mapping each `criteria.json` `id` to
-its measured value. Tools: read + write (`Write`, `Edit`, `Bash`).
+## Portable output contract
 
-### ④ Verify-and-repair loop
-Run by `_verify_and_repair`, this is the only loop in the pipeline (max
-`_MAX_REPAIR_ATTEMPTS = 2` repair attempts). Each round:
+Every successful output has a validated root-level `baseline.json` with:
 
-1. **Clear `verdict.json`**, then run the **Tester (sonnet)** &mdash; it writes a small, fast,
-   deterministic pytest suite, runs it, and writes a structured verdict. If it fails, skip to
-   repair.
-2. Clear `verdict.json`, run the **Benchmarker (sonnet)** &mdash; it runs the implementation
-   end-to-end on CPU, judges the qualitative `PLAN.md` criteria, writes `REPORT.md`, and
-   writes a structured verdict.
-3. **Mechanical check (Python, not the LLM)** &mdash; `criteria.py` compares `results.json`
-   against `criteria.json` deterministically. Any *required* criterion that fails (or whose
-   value is missing, or with a missing `results.json`) becomes a `Failure` folded into the
-   benchmarker's verdict, forcing a FAIL regardless of what the benchmarker concluded. If no
-   valid `criteria.json` exists, the check is skipped and the benchmarker's narrative verdict
-   stands.
+- schema/status, method name, and implementation origin;
+- paper URL and official code URL/commit/license/retrieval time when available;
+- stable command and normalized result path/format;
+- supported overrides and their types/flags;
+- local hardware/environment facts;
+- categorized environment, adapter, and source modifications plus the source patch;
+- verification status/command and an internal setup argv/cwd/result mapping used by the runner.
 
-The judges **only diagnose** &mdash; they never edit source. Verdict handling
-(`verdict.py`) is deliberately strict: a missing file, malformed JSON, a phase mismatch, an
-unrecognized status, or a "pass" that still lists failures **all resolve to FAIL**. Silently
-assuming a pass is the pipeline's biggest false-success risk, so anything short of a clean,
-well-formed `pass` triggers repair.
+The origins are `official_unmodified`, `official_environment_fixed`, `official_adapted`,
+`official_patched`, or `reimplemented`.
 
-If a round produces a failure verdict and the repair budget isn't spent:
+Every baseline runs through exactly:
 
-- **④c Repair (opus)** &mdash; the *only* phase that edits source. It receives the recorded
-  failures (formatted as a markdown brief) and the paper PDF path, and is told to consult the
-  paper as the authority for any method-correctness bug (a formula, equation, or algorithm
-  error). After repair, the **whole round restarts from the tester** so the fix is
-  re-verified.
-
-The loop returns success once both judges pass within the budget. If failures remain after 2
-repair attempts, the pipeline stops before cleanup with `exit(1)`, leaving `REPORT.md` and
-`verdict.json` describing the outstanding failures honestly.
-
-### ⑤ Cleaner (sonnet)
-Runs only over an implementation that passed judging. It simplifies, lints, and formats the
-repo (ruff), confirms tests and training still run, and writes `README.md`.
-
-## State and artifacts
-
-All inter-phase state lives in files inside the generated repo:
-
+```bash
+bash run.sh --spec run-spec.json --output run-result.json
 ```
+
+The checked-in default spec is `{}` and reproduces the verified run; `bash run.sh` needs no
+arguments. A spec may include `"schema_version": "1.0"`, which the runner preserves in both
+successful and failed normalized results. Supported values such as
+seed, dataset, or split are converted to real command flags. Unknown or incorrectly typed
+overrides fail with a clear error; they are never ignored. A successful normalized result has
+`status`, `seed`, a flat object of numeric/boolean `metrics`, `runtime_seconds`, and
+`implementation_origin`. The runner also writes the same flat metrics to
+`.replicator/results.json` for compatibility with the mechanical criteria check.
+
+## Output layout
+
+```text
 <repo>/
-├── PLAN.md, README.md, REPORT.md
-├── source files (.py)
-├── tests/
-├── paper/             # PDF, optional HTML, SOURCE.txt
-├── pyproject.toml
+├── baseline.json
+├── run.sh
+├── run-spec.json
+├── run-result.json
+├── PLAN.md
+├── README.md
+├── REPORT.md
+├── EVAL.md
+├── official/                    # present for adopted outputs
+├── source/tests/configs         # scratch output, or adoption-facing tests/docs
+├── paper/
 └── .replicator/
-    ├── logs/          # one transcript per phase (repair-1.log, repair-2.log, …)
-    ├── criteria.json  # planner: mechanizable success criteria
-    ├── results.json   # coder's entry point: measured values, keyed by criteria ids
-    └── verdict.json   # current judging phase's structured verdict
+    ├── adoption.json
+    ├── criteria.json
+    ├── results.json
+    ├── verdict.json
+    ├── reference_code/          # immutable official reference when found
+    ├── run.py                   # self-contained stable runner
+    └── logs/
 ```
 
-The contract that makes the planner → coder → benchmarker handoff mechanical rather than
-prose-judged is the pair `criteria.json` (what to measure and the pass threshold) and
-`results.json` (the measured values). Their comparison in `criteria.py` is pure Python &mdash; a
-numeric or boolean criterion provably passes or provably fails, with no LLM judgement in the
-loop.
+## Design principles
 
-## Design principles, summarized
-
-- **Code drives control flow.** The orchestrator decides the sequence; the model never
-  auto-delegates.
-- **Scoped agents.** Each phase has only the tools and context it needs, with a fresh
-  context per run.
-- **Separation of diagnosis and repair.** Judges never edit source; only Repair does. A
-  "pass" is therefore an independent judgement, not self-graded.
-- **Mechanical where possible.** Numeric/boolean criteria are checked deterministically in
-  Python; only genuinely qualitative criteria are left to an LLM judge.
-- **Fail loud, not silent.** Any malformed or ambiguous verdict resolves to FAIL, and an
-  unrepairable implementation exits non-zero with its failures intact.
-```
+- Python owns control flow, bounds, policy checks, promotion, and fallback.
+- Reuse escalates from zero source changes to the smallest necessary source patch.
+- Official provenance and modifications remain auditable.
+- Judges diagnose independently; Repair changes implementation code.
+- Numeric and boolean acceptance criteria are checked mechanically.
+- Anything short of a validated manifest and reproduced stable run is not a success.

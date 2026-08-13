@@ -12,7 +12,7 @@ import asyncio
 import sys
 from pathlib import Path
 
-from .agent import PROVIDERS
+from .agent import configure_backend, load_agent_settings
 from .paper import (
     copy_local_pdf,
     download_html,
@@ -28,7 +28,7 @@ from .pipeline import run_pipeline
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="replicate",
-        description="Turn a paper into a clean, minimal baseline repo.",
+        description="Acquire a validated paper baseline, reusing official code first.",
     )
     parser.add_argument(
         "url",
@@ -43,25 +43,29 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "(default: replications/<arxiv-id> or replications/pdf-<hash>).",
     )
     parser.add_argument(
-        "--provider",
-        default="anthropic",
-        choices=PROVIDERS,
-        help="LLM provider for the default per-phase models (default: anthropic). "
-        "Use 'openai' with --base-url to reach an OpenAI-compatible local server (vLLM/llama.cpp). "
-        "API keys come from the standard env vars (ANTHROPIC_API_KEY, OPENAI_API_KEY, …).",
-    )
-    parser.add_argument(
         "--model",
         default=None,
-        help="Override the model for every phase with a 'provider:model' id "
-        "(e.g. 'openai:gpt-5.1', 'ollama:qwen3-coder:30b'). "
-        "Default: a strong model for planning/coding and a cheaper one for the rest.",
+        help="Override the model for every phase.",
+    )
+    parser.add_argument(
+        "--provider",
+        choices=("codex", "openrouter", "openai-compatible"),
+        default="codex",
+        help="LLM backend (default: codex).",
+    )
+    parser.add_argument(
+        "--api-key-env", default=None, help="Environment variable holding the provider API key."
     )
     parser.add_argument(
         "--base-url",
+        default="",
+        help="OpenAI-compatible API base URL (required for openai-compatible).",
+    )
+    parser.add_argument(
+        "--agent-config",
+        type=Path,
         default=None,
-        help="Base URL of an OpenAI-compatible or custom model server "
-        "(e.g. http://localhost:8000/v1 for vLLM, or a custom ollama host).",
+        help="JSON file with per-agent model and reasoning_effort settings.",
     )
     parser.add_argument(
         "--instructions",
@@ -86,7 +90,27 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Auto-approve the plan and run the full pipeline without stopping at the "
         "human checkpoint. Useful for unattended/batch runs (e.g. HPC jobs).",
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--strategy",
+        choices=("reuse-first", "scratch"),
+        default="reuse-first",
+        help="Baseline acquisition strategy (default: reuse-first). 'scratch' preserves "
+        "the original plan-and-reimplement behavior.",
+    )
+    parser.add_argument(
+        "--unsafe-local-official-code",
+        action="store_true",
+        default=False,
+        help="Allow official repository setup and run commands on this host. This is unsafe; "
+        "without it, reuse-first falls back to scratch until a sandbox backend is configured.",
+    )
+    args = parser.parse_args(argv)
+    if args.provider != "codex" and not args.yes:
+        parser.error(
+            "--provider openrouter/openai-compatible requires --yes; "
+            "interactive plan revision is currently available only with Codex"
+        )
+    return args
 
 
 def _resolve_instructions(value: str | None) -> str:
@@ -103,6 +127,12 @@ def main(argv: list[str] | None = None) -> None:
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
     args = _parse_args(argv)
+    import os
+
+    key_env = args.api_key_env or (
+        "OPENROUTER_API_KEY" if args.provider == "openrouter" else "OPENAI_API_KEY"
+    )
+    configure_backend(args.provider, os.environ.get(key_env, ""), args.base_url)
     source = args.url.strip()
 
     try:
@@ -139,25 +169,27 @@ def main(argv: list[str] | None = None) -> None:
     (repo / "paper" / "SOURCE.txt").write_text(link + "\n")
 
     instructions = _resolve_instructions(args.instructions)
+    agent_settings = load_agent_settings(args.agent_config) if args.agent_config else {}
     if instructions:
         print(f"Instructions: {instructions[:80]}{'…' if len(instructions) > 80 else ''}")
-    print(
-        f"LLM:   provider={args.provider}"
-        + (f", base_url={args.base_url}" if args.base_url else "")
-    )
+    print(f"Agent: {args.provider}{f' (model={args.model})' if args.model else ''}")
     if args.gpu:
         print("Mode:  GPU (full + verification configs)")
     if args.yes:
         print("Mode:  auto-approve (no checkpoint)")
+    print(f"Strategy: {args.strategy}")
+    if args.unsafe_local_official_code:
+        print("Warning: official code will execute directly on this host.")
     asyncio.run(
         run_pipeline(
             repo,
-            provider=args.provider,
             model_override=args.model,
-            base_url=args.base_url,
+            agent_settings=agent_settings,
             instructions=instructions,
             gpu=args.gpu,
             auto_approve=args.yes,
+            strategy=args.strategy,
+            unsafe_local_official_code=args.unsafe_local_official_code,
         )
     )
 

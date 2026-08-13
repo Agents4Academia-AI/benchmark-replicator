@@ -1,7 +1,7 @@
 """Definitions of the pipeline's scoped sub-agents.
 
-Each phase is one LangGraph ReAct agent with its own system prompt, a restricted
-tool set, and a turn cap. Phases share state through files in the generated repo
+Each phase is one isolated Codex thread with its own system prompt and scoped
+capabilities. Phases share state through files in the generated repo
 (``PLAN.md``, the source code, ``REPORT.md``).
 """
 
@@ -76,9 +76,6 @@ class Phase:
     allowed_tools: list[str]
     """Tools this sub-agent may call. Everything else is unavailable."""
 
-    max_turns: int = 80
-    """Hard cap on agentic turns, to bound cost."""
-
     def system_prompt(self, hardware: str) -> str:
         """Load this phase's system prompt from ``prompts/<name>.md``.
 
@@ -94,9 +91,9 @@ class Phase:
 
 # The phases. ``{sources}`` and ``{instructions}`` in the planner task, ``{pdf}`` and
 # ``{failures}`` in the repair task are filled in by the orchestrator. The orchestrator
-# decides the control flow: planner → coder → (tester → benchmarker, with repair +
-# re-verify on failure) → cleaner. The judging phases (tester, benchmarker) only
-# diagnose and write a verdict; the repair phase does the fixing.
+# decides the control flow: planner → bounded official-code adoption or coder →
+# (tester → benchmarker, with repair + re-verify on failure) → cleaner. The judging
+# phases (tester, benchmarker) only diagnose and write a verdict.
 
 PLANNER = Phase(
     name="planner",
@@ -117,7 +114,46 @@ REVISER = Phase(
     # Like the planner (paper + web) plus Edit, for surgical changes to the existing
     # PLAN.md and criteria.json.
     allowed_tools=[*_READ_TOOLS, "Write", "Edit", "WebFetch", "WebSearch"],
-    max_turns=40,
+)
+
+ADOPTION_INSPECTOR = Phase(
+    name="adoption_inspector",
+    task=(
+        "Inspect this untouched official-code working copy and write "
+        "`.replicator/adoption-candidate.json`, following your instructions. Do not run or "
+        "modify official files."
+    ),
+    allowed_tools=[*_READ_TOOLS, "Write"],
+)
+
+ENVIRONMENT_FIXER = Phase(
+    name="environment_fixer",
+    task=(
+        "The unchanged official-code invocation failed. Make one bounded dependency or "
+        "environment-only repair in this working copy, then update "
+        "`.replicator/adoption-candidate.json`, following your instructions.\n\n{failure}"
+    ),
+    allowed_tools=[*_READ_TOOLS, *_WRITE_TOOLS],
+)
+
+ADAPTER = Phase(
+    name="adapter",
+    task=(
+        "The official invocation still failed. Add only a thin invocation and metric-extraction "
+        "adapter in this working copy, then update "
+        "`.replicator/adoption-candidate.json`, following your instructions.\n\n{failure}"
+    ),
+    allowed_tools=[*_READ_TOOLS, *_WRITE_TOOLS],
+)
+
+SOURCE_PATCHER = Phase(
+    name="source_patcher",
+    task=(
+        "Environment and adapter attempts failed. Apply one minimal source patch to this "
+        "working copy, then update "
+        "`.replicator/adoption-candidate.json`, following your instructions.\n\n{failure}"
+    ),
+    allowed_tools=[*_READ_TOOLS, *_WRITE_TOOLS],
 )
 
 CODER = Phase(

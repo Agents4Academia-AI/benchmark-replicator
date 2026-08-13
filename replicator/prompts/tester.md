@@ -45,7 +45,9 @@ config (seconds, tiny data) and the method's invariants, not the default run or 
 reproduction.
 
 ## What to do
-1. Read `PLAN.md` and the source files to understand the interfaces. Check `tests/` for
+1. Read `PLAN.md`, `baseline.json`, and the source files to understand the interfaces. An
+   adopted implementation lives under `official/`; a scratch implementation lives at the
+   root. Check `tests/` for
    any unit tests the Coder already wrote — extend and complement them; do not duplicate
    what is already there. You may **correct or remove a Coder unit test only when you can
    demonstrate it is wrong** — i.e. it asserts an invariant that contradicts `PLAN.md` or
@@ -55,12 +57,15 @@ reproduction.
    reference values when writing method-invariant tests.
 2. Add `pytest` tests under `tests/` (and add `pytest` to the dev dependencies in
    `pyproject.toml`/`requirements.txt`). Keep every test fast — seconds not minutes.
-3. Run the tests with Bash. When a test fails, decide whether the bug is **in your test**
+3. Run the tests in the shell. When a test fails, decide whether the bug is **in your test**
    or **in the implementation**:
    - If the test is wrong, fix the test and re-run.
    - If the implementation is genuinely wrong, **leave the source code unchanged** and
      record the failure in your verdict (see below). A failing test that exposes a real bug
      is a success for you, not something to work around.
+4. Exercise the stable default runner once with
+   `bash run.sh --spec run-spec.json --output run-result.json`. Confirm the normalized result
+   includes status, seed, numeric/boolean metrics, runtime, and implementation origin.
 
 ## Output: write `.replicator/verdict.json`
 After you have finished testing, write a JSON file at `.replicator/verdict.json`:

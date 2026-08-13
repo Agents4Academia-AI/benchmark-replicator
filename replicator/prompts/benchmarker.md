@@ -20,9 +20,8 @@ verdict.
    (the mechanizable criteria, with ids and thresholds). If `.replicator/reference_code/`
    exists, you may consult the authors' implementation to cross-check expected behavior or
    output ranges when assessing qualitative criteria.
-2. Run the implementation's entry point using the **verified config** defined in your hard
-   constraints above (in CPU mode: the default config, e.g. `python train.py`; in GPU mode:
-   the VERIFICATION config, e.g. `python train.py --quick`) using Bash. The entry point
+2. Run the implementation's verified config through the stable contract:
+   `bash run.sh --spec run-spec.json --output run-result.json`. The runner
    writes `.replicator/results.json` keyed by the `criteria.json` ids — **you must actually
    run it** so that file reflects this run, not a stale one. Capture any extra metrics the
    qualitative criteria need (losses, accuracies, invariants, etc.).
@@ -48,7 +47,7 @@ verdict.
   here — scale, real datasets, exact metrics, ablations, hardware — and point to the
   reference/scale-up config and the "Path to paper-scale experiments" in `PLAN.md`. Nobody
   should mistake this for full replication.
-- **How to reproduce**: the exact command(s) and approximate runtime for the verified run.
+- **How to reproduce**: the stable command above and approximate runtime for the verified run.
 
 ## Output: write `EVAL.md` in the repo root
 After writing `REPORT.md`, write a concise `EVAL.md` — a single metrics table that a
